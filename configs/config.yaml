@@ -1,0 +1,70 @@
+# Main Hydra config. Composes per-component configs from sub-folders.
+# Override on CLI: `uv run python scripts/train.py backbone=eb1 loss=ms ...`
+# Or compose via experiment file: `+experiment=smoke`.
+
+defaults:
+  - backbone: r18
+  - head: projection
+  - loss: tri
+  - sampler: pk
+  - transform: aug-min
+  - _self_
+
+# Experiment identity (used for output dir + W&B run name)
+experiment_name: ref
+
+# Reproducibility
+seed: 0
+deterministic: false   # CUDA cuDNN deterministic mode (slows training noticeably)
+
+# Embedding
+embedding_dim: 512
+
+# Data paths
+catalog_path: outputs/catalog.parquet
+reid_root: dataSoccerNet/reid-2023
+
+# Training schedule
+num_epochs: 60
+num_iters_per_epoch: 5000
+log_every: 50
+
+# Optim
+optimizer:
+  name: adam
+  lr: 3.5e-4
+  weight_decay: 5.0e-4
+scheduler:
+  warmup_epochs: 5
+  min_lr_ratio: 0.0
+
+# Backend
+device: auto         # auto / cuda / mps / cpu
+amp: true            # automatically disabled on non-CUDA devices
+num_workers: 4
+
+# Evaluation (during training and at end)
+eval:
+  batch_size: 64
+  every_n_epochs: 10
+  ranks: [1, 5, 10]
+  distance: cosine
+  split: valid
+
+# Weights & Biases
+wandb:
+  enabled: true
+  project: soccernet-reid
+  mode: online       # online / offline / disabled
+  tags: []
+  notes: ""
+
+# Outputs
+output_dir: outputs/runs/${experiment_name}
+
+# Hydra runtime config
+hydra:
+  run:
+    dir: ${output_dir}
+  job:
+    chdir: false

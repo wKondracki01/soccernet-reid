@@ -1,0 +1,15 @@
+# @package _global_
+# Tiny smoke configuration: 2 epochs × 30 iterations, no AMP, no W&B.
+# Use: `uv run python scripts/train.py +experiment=smoke`
+
+experiment_name: smoke
+num_epochs: 2
+num_iters_per_epoch: 30
+log_every: 5
+amp: false
+num_workers: 0   # avoid worker init overhead for the smoke
+eval:
+  every_n_epochs: 1   # eval after each tiny epoch to confirm pipeline works
+  batch_size: 32
+wandb:
+  enabled: false

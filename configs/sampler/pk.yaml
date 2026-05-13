@@ -1,0 +1,4 @@
+# Cross-action PK sampler. Default for non-classifier losses.
+name: pk
+P: 16
+K: 2

@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# Virtual env
+.venv/
+venv/
+
+# uv — keep .python-version committed so all machines use the same interpreter
+# (do NOT add it here)
+
+# Data — never commit (36 GB)
+dataSoccerNet/
+
+# Outputs — checkpoints, logs, cached catalogs
+outputs/
+wandb/
+runs/
+*.parquet
+*.pt
+*.pth
+*.ckpt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_meta
+
+# Memory dir — outside repo anyway, but just in case
+.claude/

@@ -1,0 +1,4 @@
+# Standard random sampler — used for CE / ArcFace per plan §3 Faza 2 exception.
+# `batch_size` here equals the analogous P*K for fair comparison.
+name: random
+batch_size: 32

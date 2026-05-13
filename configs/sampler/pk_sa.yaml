@@ -1,0 +1,4 @@
+# Per-action PK sampler. Smaller P/K because only 39.5% of actions have ≥8 IDs.
+name: pk_sa
+P: 8
+K: 2
