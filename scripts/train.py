@@ -275,6 +275,39 @@ def main(cfg: DictConfig) -> None:
                 torch.save(ckpt, ckpt_path)
                 print(f"  Saved best checkpoint -> {ckpt_path} (mAP={best_map:.4f})")
 
+                # W&B Artifact upload (versioned checkpoint, recoverable from any machine).
+                # Wrapped in try/except so a network blip doesn't crash the training run.
+                if wandb_run is not None:
+                    try:
+                        import wandb
+                        artifact = wandb.Artifact(
+                            name=f"{cfg.experiment_name}-best",
+                            type="model",
+                            description=(
+                                f"Best valid mAP={best_map:.4f} at epoch {epoch} "
+                                f"({cfg.backbone.name}+{cfg.head.name}+{cfg.loss.name})"
+                            ),
+                            metadata={
+                                "epoch": epoch,
+                                "valid_mAP": best_map,
+                                "valid_rank_1": eval_metrics.get("rank-1"),
+                                "valid_rank_5": eval_metrics.get("rank-5"),
+                                "valid_rank_10": eval_metrics.get("rank-10"),
+                                "backbone": cfg.backbone.name,
+                                "head": cfg.head.name,
+                                "loss": cfg.loss.name,
+                                "embedding_dim": embedding_dim,
+                            },
+                        )
+                        artifact.add_file(str(ckpt_path))
+                        wandb_run.log_artifact(
+                            artifact,
+                            aliases=[f"epoch-{epoch}", f"map-{best_map:.4f}", "best"],
+                        )
+                        print(f"  Uploaded checkpoint to W&B as '{cfg.experiment_name}-best'")
+                    except Exception as e:
+                        print(f"  W&B artifact upload failed (non-fatal): {e}")
+
         if wandb_run is not None:
             wandb_run.log(epoch_log)
 
