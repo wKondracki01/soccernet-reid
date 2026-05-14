@@ -36,6 +36,25 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/soccernet_reid"]
 
+# --- PyTorch source selection -----------------------------------------------
+# Default PyPI wheels for torch on Windows/Linux are CPU-only (Windows) or
+# CUDA 12.4 (Linux, post-2.5). To get reproducible CUDA wheels on every
+# non-Mac machine we explicitly point uv at PyTorch's `cu124` index. On Mac
+# (darwin) we skip this and let uv use the default PyPI wheel which ships
+# with MPS support.
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu124", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+]
+torchvision = [
+    { index = "pytorch-cu124", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
