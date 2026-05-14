@@ -44,6 +44,13 @@ def main() -> int:
         default=100,
         help="How many images to open and verify dimensions (default: 100)",
     )
+    parser.add_argument(
+        "--drop-missing",
+        action="store_true",
+        help="Drop catalog rows whose path does NOT exist on disk (instead of "
+        "failing). Useful on Windows where some files extract with mangled "
+        "names due to non-ASCII chars (rare — ~9/376k for SoccerNet ReID 2023).",
+    )
     args = parser.parse_args()
 
     if not args.reid_root.is_dir():
@@ -75,11 +82,27 @@ def main() -> int:
             print("\nVerifying random sample of paths exist on disk ...")
             missing = verify_paths_exist(df, sample_size=200)
         if missing:
-            print(f"  FAIL: {len(missing)} missing files; first 5:", file=sys.stderr)
-            for m in missing[:5]:
-                print(f"    {m}", file=sys.stderr)
-            return 3
-        print("  OK")
+            if args.drop_missing:
+                missing_set = set(missing)
+                before = len(df)
+                df = df[~df["path"].isin(missing_set)].reset_index(drop=True)
+                print(
+                    f"  {len(missing)} files missing; dropped from catalog "
+                    f"({before:,} -> {len(df):,} rows)"
+                )
+                for m in missing[:5]:
+                    print(f"    dropped: {m}")
+            else:
+                print(f"  FAIL: {len(missing)} missing files; first 5:", file=sys.stderr)
+                for m in missing[:5]:
+                    print(f"    {m}", file=sys.stderr)
+                print(
+                    "  (re-run with --drop-missing to filter these out of the catalog)",
+                    file=sys.stderr,
+                )
+                return 3
+        else:
+            print("  OK")
 
         print(f"\nVerifying image dimensions (sample {args.dimension_sample}) ...")
         dim_errors = verify_image_dimensions(df, sample_size=args.dimension_sample)
