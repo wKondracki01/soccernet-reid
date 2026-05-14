@@ -3,16 +3,29 @@
 Why this exists
 ---------------
 On Windows, naive backgrounding patterns (`Start-Process -NoNewWindow`,
-`uv run X &`, `start /B`) all fail in subtle ways: the child inherits the
-SSH session's console and gets killed when the SSH command returns. This
-launcher uses platform-specific *full detach* primitives:
+`uv run X &`, `start /B`) all fail in subtle ways. Empirically with this
+project's setup (Windows OpenSSH + venv python), even
+`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` was insufficient — children
+were dying silently within seconds of being spawned. The fix that worked:
+also pass **CREATE_BREAKAWAY_FROM_JOB**.
 
-  - Windows: `creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`
-  - Unix:    `start_new_session=True` (calls setsid(2))
+Background: the Windows OpenSSH service wraps each user session in a
+Job Object. Job Objects are a kernel mechanism for managing groups of
+processes — when the Job dies, *all* descendant processes are killed,
+regardless of console/group state. Adding CREATE_BREAKAWAY_FROM_JOB
+to CreateProcess makes the child opt out of the parent's Job.
 
-The child runs in its own process group, with no controlling terminal,
-and survives SSH disconnect. Logs go to disk so we can monitor with
-`Get-Content -Wait` or `tail -f`.
+So on Windows we use:
+    DETACHED_PROCESS           (no inherited console)
+  | CREATE_NEW_PROCESS_GROUP   (own Ctrl-C / signal group)
+  | CREATE_BREAKAWAY_FROM_JOB  (escape SSH session's Job Object)
+
+On Unix, plain `start_new_session=True` (calls setsid(2)) is enough —
+no Job Object equivalent.
+
+The child runs detached, surviving SSH disconnect and the launching
+shell's exit. Logs go to disk so we can monitor with `Get-Content -Wait`
+or `tail -f`.
 
 Two convenience modes:
   --kind train     (default) → spawns scripts/train.py with Hydra overrides
@@ -138,19 +151,45 @@ def main() -> int:
     err_f = stderr_log.open("wb", buffering=0)
 
     if sys.platform == "win32":
-        flags = (
+        # See module docstring for why CREATE_BREAKAWAY_FROM_JOB is needed.
+        base_flags = (
             subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
             | subprocess.CREATE_NEW_PROCESS_GROUP
         )
-        proc = subprocess.Popen(
-            cmd,
-            stdout=out_f,
-            stderr=err_f,
-            stdin=subprocess.DEVNULL,
-            cwd=str(PROJECT_ROOT),
-            creationflags=flags,
-            close_fds=True,
-        )
+        breakaway = subprocess.CREATE_BREAKAWAY_FROM_JOB  # type: ignore[attr-defined]
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=out_f,
+                stderr=err_f,
+                stdin=subprocess.DEVNULL,
+                cwd=str(PROJECT_ROOT),
+                creationflags=base_flags | breakaway,
+                close_fds=True,
+            )
+        except OSError as e:
+            # ACCESS_DENIED (winerror 5) means parent's Job Object lacks
+            # JOB_OBJECT_LIMIT_BREAKAWAY_OK — which would cause CreateProcess
+            # to refuse the breakaway flag. Retry without breakaway, but warn:
+            # the child may still die when the launching shell exits.
+            if getattr(e, "winerror", None) == 5:
+                print(
+                    "WARNING: CREATE_BREAKAWAY_FROM_JOB denied by parent's Job "
+                    "Object. Child may not survive SSH disconnect or shell exit. "
+                    "Continuing without breakaway flag.",
+                    file=sys.stderr,
+                )
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=out_f,
+                    stderr=err_f,
+                    stdin=subprocess.DEVNULL,
+                    cwd=str(PROJECT_ROOT),
+                    creationflags=base_flags,
+                    close_fds=True,
+                )
+            else:
+                raise
     else:
         proc = subprocess.Popen(
             cmd,
