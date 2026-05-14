@@ -162,7 +162,7 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 - **Optymalizator**: Adam(lr=3.5e-4, wd=5e-4), cosine schedule z warmup 5 epok.
 - **Definicja epoki**: przy samplerach PK-style jeden batch nie odpowiada „przeglądowi datasetu". Przyjmujemy **epoka = 5000 iteracji** (≈ jeden przegląd 225 k próbek dla batcha 32; PK-SA z batch 16 widzi w sumie połowę próbek na epokę — patrz uwaga w §3 o porównywalności samplerów).
 - **Epoki**: 60 (plateau na podobnych re-id setupach ok. 40–50). W Fazach 1–3 można skrócić do 40 epok i tylko najlepsze konfiguracje przedłużyć do 60.
-- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Dla VGG-16 z 8 GB VRAM batch może wymagać dalszej redukcji do P=8/K=2 = 16 — odnotowane, ale finalne ciężkie przebiegi VGG idą i tak na cloud (A6000/A100).
+- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Dostępna pamięć GPU: **RTX 3080 Laptop = 16 GB VRAM** (zweryfikowane przez `nvidia-smi`), wszystkie backbone'y z planu (R18..VGG16-BN) mieszczą się w batch=32 + AMP bez kompromisów — cloud nie jest konieczny dla Faz 1-5.
 - **Mixed precision (AMP)** — przyspiesza ~2×.
 - **Seedy**: 3 seedy per kluczowy przebieg w Fazach 3/4/5 → raportujemy średnią ± odch. std. Faza 1/2: 1 seed.
 - **Logowanie**: TensorBoard + CSV (loss, lr, valid mAP/R-1 co N epok); checkpoint best-mAP; pełna konfiguracja (Hydra) zapisana w katalogu eksperymentu.
