@@ -174,7 +174,7 @@ def main(cfg: DictConfig) -> None:
     ).to(device)
     embedding_dim = model.embedding_dim
     print(
-        f"Model: {cfg.backbone.name} + {cfg.head.name} → D={embedding_dim} "
+        f"Model: {cfg.backbone.name} + {cfg.head.name} -> D={embedding_dim} "
         f"({sum(p.numel() for p in model.parameters()):,} params)"
     )
 
@@ -273,7 +273,7 @@ def main(cfg: DictConfig) -> None:
                 }
                 ckpt_path = output_dir / "best.pt"
                 torch.save(ckpt, ckpt_path)
-                print(f"  Saved best checkpoint → {ckpt_path} (mAP={best_map:.4f})")
+                print(f"  Saved best checkpoint -> {ckpt_path} (mAP={best_map:.4f})")
 
         if wandb_run is not None:
             wandb_run.log(epoch_log)

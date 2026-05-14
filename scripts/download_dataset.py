@@ -75,7 +75,7 @@ def download(target: Path, splits: list[str], force: bool) -> None:
 
     target.mkdir(parents=True, exist_ok=True)
     downloader = SoccerNetDownloader(LocalDirectory=str(target))
-    print(f"\nDownloading task='reid-2023' splits={splits} → {target.resolve()}")
+    print(f"\nDownloading task='reid-2023' splits={splits} -> {target.resolve()}")
     print("(SoccerNetDownloader skips files whose MD5 already matches; this can be fast.)")
     t0 = time.perf_counter()
     downloader.downloadDataTask(task="reid-2023", split=splits)
@@ -108,7 +108,7 @@ def extract(target: Path, splits: list[str], force: bool) -> None:
                 print(f"  skip extraction of {split}: {out_dir} already exists (use --force to re-extract)")
                 continue
 
-        print(f"\nExtracting {zip_path.name} ({_human_bytes(zip_path.stat().st_size)}) → {out_dir} ...")
+        print(f"\nExtracting {zip_path.name} ({_human_bytes(zip_path.stat().st_size)}) -> {out_dir} ...")
         t0 = time.perf_counter()
         with zipfile.ZipFile(zip_path) as zf:
             zf.extractall(reid_dir)

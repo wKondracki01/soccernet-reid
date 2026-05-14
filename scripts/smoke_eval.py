@@ -219,10 +219,10 @@ def main() -> int:
         print(f"  Official Rank-1: {theirs['rank-1']:.6f}")
         diff_map = abs(ours["mAP"] - theirs["mAP"])
         diff_r1 = abs(ours["rank-1"] - theirs["rank-1"])
-        print(f"\n|ΔmAP|    = {diff_map:.2e}")
-        print(f"|ΔRank-1| = {diff_r1:.2e}")
+        print(f"\n|delta mAP|    = {diff_map:.2e}")
+        print(f"|delta Rank-1| = {diff_r1:.2e}")
         if diff_map > 1e-5 or diff_r1 > 1e-5:
-            print("  PARITY FAILED — abs diff > 1e-5", file=sys.stderr)
+            print("  PARITY FAILED -- abs diff > 1e-5", file=sys.stderr)
             return 2
         print("  PARITY OK (both metrics within 1e-5)")
 

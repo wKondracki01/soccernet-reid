@@ -12,7 +12,7 @@ For SoccerNet ReID specifically (see §3 of PLAN_EKSPERYMENTOW.md):
 - Cross-action PK: P=16, K=2 → batch 32.
 - PK-per-action (PK-SA): P=8, K=2 → batch 16 (39 % of actions qualify).
 
-Both samplers IMPLICITLY skip singletons by requiring ≥K samples per class —
+Both samplers IMPLICITLY skip singletons by requiring >=K samples per class —
 no explicit catalog filter needed. This is the convention from BoT-ReID and
 other ReID baselines.
 
@@ -33,7 +33,7 @@ class PKBatchSampler(Sampler[list[int]]):
     """Cross-action PK batch sampler.
 
     Each batch:
-    1. Pick P unique classes from those with ≥K samples in the dataset.
+    1. Pick P unique classes from those with >=K samples in the dataset.
     2. From each chosen class, sample K dataset-indices uniformly without
        replacement.
     3. Yield the concatenated list of P·K indices.
@@ -47,7 +47,7 @@ class PKBatchSampler(Sampler[list[int]]):
         seed: RNG seed for reproducibility.
 
     Raises:
-        ValueError: if fewer than P classes qualify (have ≥K samples).
+        ValueError: if fewer than P classes qualify (have >=K samples).
     """
 
     def __init__(
@@ -59,11 +59,11 @@ class PKBatchSampler(Sampler[list[int]]):
         seed: int = 0,
     ) -> None:
         if P < 2:
-            raise ValueError(f"P must be ≥2 to form pos/neg pairs in a batch, got {P}")
+            raise ValueError(f"P must be >=2 to form pos/neg pairs in a batch, got {P}")
         if K < 2:
-            raise ValueError(f"K must be ≥2 for metric learning to form positives, got {K}")
+            raise ValueError(f"K must be >=2 for metric learning to form positives, got {K}")
         if num_batches < 1:
-            raise ValueError(f"num_batches must be ≥1, got {num_batches}")
+            raise ValueError(f"num_batches must be >=1, got {num_batches}")
 
         self.P = P
         self.K = K
@@ -87,13 +87,13 @@ class PKBatchSampler(Sampler[list[int]]):
 
         if len(self._qualifying_classes) < P:
             raise ValueError(
-                f"Only {len(self._qualifying_classes)} classes have ≥K={K} samples, "
+                f"Only {len(self._qualifying_classes)} classes have >=K={K} samples, "
                 f"but P={P} requested. Lower K, lower P, or use a different sampler."
             )
 
     @property
     def qualifying_classes(self) -> list[int]:
-        """Class IDs eligible for sampling (length ≥ P guaranteed)."""
+        """Class IDs eligible for sampling (length >= P guaranteed)."""
         return list(self._qualifying_classes)
 
     def __len__(self) -> int:
@@ -118,10 +118,10 @@ class PKPerActionBatchSampler(Sampler[list[int]]):
     Each batch is sampled entirely from one action — matching the official
     evaluation protocol where retrieval is action-local. Two-stage filtering:
 
-    1. A class qualifies if it has ≥K samples in its action (== its (action,
-       uid) pair has ≥K samples). Since `class_id` IS the (action, uid) pair,
-       this is the same as ≥K samples per class.
-    2. An action qualifies if it has ≥P qualifying classes.
+    1. A class qualifies if it has >=K samples in its action (== its (action,
+       uid) pair has >=K samples). Since `class_id` IS the (action, uid) pair,
+       this is the same as >=K samples per class.
+    2. An action qualifies if it has >=P qualifying classes.
 
     Each batch:
     a. Pick a qualifying action.
@@ -134,7 +134,7 @@ class PKPerActionBatchSampler(Sampler[list[int]]):
         P, K, num_batches, seed: as in :class:`PKBatchSampler`.
 
     Raises:
-        ValueError: if no action qualifies (< P classes with ≥K samples).
+        ValueError: if no action qualifies (< P classes with >=K samples).
     """
 
     def __init__(
@@ -152,11 +152,11 @@ class PKPerActionBatchSampler(Sampler[list[int]]):
                 f"{len(class_ids)} vs {len(action_ids)}"
             )
         if P < 2:
-            raise ValueError(f"P must be ≥2, got {P}")
+            raise ValueError(f"P must be >=2, got {P}")
         if K < 2:
-            raise ValueError(f"K must be ≥2, got {K}")
+            raise ValueError(f"K must be >=2, got {K}")
         if num_batches < 1:
-            raise ValueError(f"num_batches must be ≥1, got {num_batches}")
+            raise ValueError(f"num_batches must be >=1, got {num_batches}")
 
         self.P = P
         self.K = K
@@ -197,7 +197,7 @@ class PKPerActionBatchSampler(Sampler[list[int]]):
 
         if len(self._qualifying_actions) == 0:
             raise ValueError(
-                f"No action has ≥P={P} classes with ≥K={K} samples. "
+                f"No action has >=P={P} classes with >=K={K} samples. "
                 f"Try lower P (e.g. 4) or K=2."
             )
 

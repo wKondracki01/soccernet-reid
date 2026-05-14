@@ -47,12 +47,12 @@ class TestPKBatchSampler:
 
     def test_raises_when_too_few_qualifying_classes(self) -> None:
         class_ids = _make_class_ids({0: 2, 1: 2})  # only 2 qualifying
-        with pytest.raises(ValueError, match="have ≥K=2 samples"):
+        with pytest.raises(ValueError, match="have >=K=2 samples"):
             PKBatchSampler(class_ids, P=4, K=2, num_batches=10, seed=0)
 
     def test_raises_on_K_too_high(self) -> None:
         class_ids = _make_class_ids({0: 2, 1: 2, 2: 2})  # max class size = 2
-        with pytest.raises(ValueError, match="have ≥K=4"):
+        with pytest.raises(ValueError, match="have >=K=4"):
             PKBatchSampler(class_ids, P=2, K=4, num_batches=10, seed=0)
 
     def test_seed_reproducibility(self) -> None:
@@ -91,12 +91,12 @@ class TestPKBatchSampler:
 
     def test_validates_K_at_least_2(self) -> None:
         class_ids = _make_class_ids({0: 5, 1: 5})
-        with pytest.raises(ValueError, match="K must be ≥2"):
+        with pytest.raises(ValueError, match="K must be >=2"):
             PKBatchSampler(class_ids, P=2, K=1, num_batches=1)
 
     def test_validates_P_at_least_2(self) -> None:
         class_ids = _make_class_ids({0: 5, 1: 5})
-        with pytest.raises(ValueError, match="P must be ≥2"):
+        with pytest.raises(ValueError, match="P must be >=2"):
             PKBatchSampler(class_ids, P=1, K=2, num_batches=1)
 
 
@@ -139,14 +139,14 @@ class TestPKPerActionBatchSampler:
                 assert picked_classes.count(c) == 2
 
     def test_raises_when_no_action_qualifies(self) -> None:
-        # 2 actions, but each has only 1 class with ≥2 samples
+        # 2 actions, but each has only 1 class with >=2 samples
         class_ids = [0, 0, 1, 100, 100, 101]
         action_ids = [0, 0, 0, 1, 1, 1]
-        with pytest.raises(ValueError, match="No action has ≥P=2"):
+        with pytest.raises(ValueError, match="No action has >=P=2"):
             PKPerActionBatchSampler(class_ids, action_ids, P=2, K=2, num_batches=1, seed=0)
 
     def test_partial_qualification_skips_bad_action(self) -> None:
-        # Action 0 has 3 classes with ≥2 samples (qualifies for P=2,K=2).
+        # Action 0 has 3 classes with >=2 samples (qualifies for P=2,K=2).
         # Action 1 has only 1 such class (doesn't qualify).
         # All batches should come from action 0.
         class_ids = (
@@ -166,7 +166,7 @@ class TestPKPerActionBatchSampler:
 
     def test_qualifying_actions_property(self) -> None:
         # Action 0: 2 classes × 2 samples → qualifies for P=2/K=2
-        # Action 1: only 1 class with ≥2 samples → no
+        # Action 1: only 1 class with >=2 samples → no
         # Action 2: 3 classes × 2 samples → qualifies
         class_ids = [0, 0, 1, 1,   100, 100, 101,   200, 200, 201, 201, 202, 202]
         action_ids = [0, 0, 0, 0,  1, 1, 1,         2, 2, 2, 2, 2, 2]
