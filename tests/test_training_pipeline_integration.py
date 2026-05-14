@@ -20,14 +20,12 @@ from soccernet_reid.data.catalog import (
     assign_class_ids,
     build_catalog,
     filter_to_player_classes,
-    load_catalog,
 )
 from soccernet_reid.data.dataset import ReIDImageDataset
 from soccernet_reid.samplers import PKBatchSampler, PKPerActionBatchSampler
 from soccernet_reid.transforms import build_transform
 
 REID_ROOT = Path(__file__).resolve().parent.parent / "dataSoccerNet" / "reid-2023"
-CATALOG_PATH = Path(__file__).resolve().parent.parent / "outputs" / "catalog.parquet"
 
 pytestmark = pytest.mark.skipif(
     not REID_ROOT.is_dir(),
@@ -37,11 +35,14 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def train_catalog():
-    """Full catalog → train split → player-class filter → class_id assigned."""
-    if CATALOG_PATH.exists():
-        full = load_catalog(CATALOG_PATH)
-    else:
-        full = build_catalog(REID_ROOT)
+    """Full catalog -> train split -> player-class filter -> class_id assigned.
+
+    Always build from `bbox_info.json` (not from cached parquet) so the row
+    counts are deterministic across machines and independent of any
+    --drop-missing post-processing applied to the parquet (e.g., to handle
+    Windows extraction artefacts).
+    """
+    full = build_catalog(REID_ROOT)
     train = full[full["split"] == "train"].copy()
     train = filter_to_player_classes(train)
     train = assign_class_ids(train)
