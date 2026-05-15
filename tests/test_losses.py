@@ -92,6 +92,70 @@ class TestHyperparameters:
         assert torch.isfinite(out)
 
 
+class TestMinerOverride:
+    """New options from §2.C: configurable miner per metric loss."""
+
+    @pytest.mark.parametrize("miner", ["batch-hard", "semi-hard", "none"])
+    def test_metric_loss_accepts_miner(self, miner: str) -> None:
+        m = build_loss("tri", embedding_dim=D, miner=miner)
+        assert m.miner_name == miner
+        assert m.xbm_enabled is False
+        emb, lbl = _random_pk_batch()
+        out = m.call(emb, lbl)
+        assert torch.isfinite(out)
+
+    def test_default_miner_per_loss(self) -> None:
+        # tri -> batch-hard
+        assert build_loss("tri", embedding_dim=D).miner_name == "batch-hard"
+        # cont -> none (all-pairs)
+        assert build_loss("cont", embedding_dim=D).miner_name == "none"
+        # ms -> multi-similarity
+        assert build_loss("ms", embedding_dim=D).miner_name == "multi-similarity"
+        # circle -> batch-hard
+        assert build_loss("circle", embedding_dim=D).miner_name == "batch-hard"
+
+    def test_unknown_miner_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown miner"):
+            build_loss("tri", embedding_dim=D, miner="not-a-miner")
+
+    def test_classifier_loss_rejects_miner(self) -> None:
+        with pytest.raises(ValueError, match="classifier-based"):
+            build_loss("ce", embedding_dim=D, num_classes=NUM_CLASSES, miner="batch-hard")
+        with pytest.raises(ValueError, match="classifier-based"):
+            build_loss("arc", embedding_dim=D, num_classes=NUM_CLASSES, miner="semi-hard")
+
+
+class TestXBM:
+    """Cross-Batch Memory wrapper for metric losses."""
+
+    @pytest.mark.parametrize("loss_name", ["tri", "cont", "ms", "circle"])
+    def test_xbm_wraps_metric_loss(self, loss_name: str) -> None:
+        m = build_loss(loss_name, embedding_dim=D, xbm=True, xbm_memory_size=64)
+        assert m.xbm_enabled is True
+        # Run a couple of steps to actually populate the memory bank
+        emb, lbl = _random_pk_batch(seed=0)
+        out1 = m.call(emb, lbl)
+        assert torch.isfinite(out1)
+        emb2, lbl2 = _random_pk_batch(seed=1)
+        out2 = m.call(emb2, lbl2)
+        assert torch.isfinite(out2)
+
+    def test_classifier_loss_rejects_xbm(self) -> None:
+        with pytest.raises(ValueError, match="classifier-based"):
+            build_loss("ce", embedding_dim=D, num_classes=NUM_CLASSES, xbm=True)
+        with pytest.raises(ValueError, match="classifier-based"):
+            build_loss("arc", embedding_dim=D, num_classes=NUM_CLASSES, xbm=True)
+
+    def test_xbm_with_custom_miner(self) -> None:
+        # XBM + override miner — common combo from §2.C (PK-BH-XBM)
+        m = build_loss("tri", embedding_dim=D, miner="batch-hard", xbm=True, xbm_memory_size=64)
+        assert m.miner_name == "batch-hard"
+        assert m.xbm_enabled is True
+        emb, lbl = _random_pk_batch()
+        out = m.call(emb, lbl)
+        assert torch.isfinite(out)
+
+
 def test_optimization_step_decreases_loss_for_triplet() -> None:
     """Smoke check that backprop on a tiny model actually reduces a triplet loss."""
     torch.manual_seed(0)
