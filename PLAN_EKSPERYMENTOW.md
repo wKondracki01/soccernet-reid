@@ -108,7 +108,7 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 ### Faza 2 — oś B (strata)
 `R18 + S*`, strata ∈ {`CE, CONT, TRI, MS, CIRCLE, ARC`}. **6 przebiegów.** → wybieramy `L*`.
 
-> **Doprecyzowanie**: z pakietu `S*` przenosimy do Fazy 2 tylko **sampler**, **miner dobieramy do straty** zgodnie z literaturą:
+> **Doprecyzowanie samplera/minera**: z pakietu `S*` przenosimy do Fazy 2 tylko **sampler**, **miner dobieramy do straty** zgodnie z literaturą:
 > - `CONT` → all-pairs (bez minera),
 > - `TRI` → BATCH-HARD (z `S*`, jeśli ma) lub SEMI-HARD,
 > - `MS` → `MultiSimilarityMiner` (część definicji straty),
@@ -116,6 +116,8 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 > - `CE`, `ARC` → **losowy sampler** niezależnie od `S*` (PK-SA daje w batchu klasy tylko z 1 akcji → softmax na dziesiątkach tysięcy klas degeneruje).
 >
 > XBM z pakietu `S*` dziedziczymy jeśli był i jeśli strata jest parowa.
+>
+> **Doprecyzowanie głowy modelu**: Faza 2 używa domyślnej głowy `projection` (BN→FC→BN→L2-norm) dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`) i dla `ARC` (ArcFace ma wewnętrzny scale=30 który neutralizuje saturację logitów). Wyjątek dla `CE`: musi używać głowy **`classifier_cut`** (raw features, bez L2-norm), ponieważ L2-norma na 138k-class CE classifierze powoduje saturację — logity skalują się do ~[-0.06, 0.06], softmax wychodzi praktycznie uniform, gradient zerowy, train loss zatrzymuje się na `ln(138852)≈11.84`. Empirycznie zweryfikowane (F2_CE v1 z projection head: train_loss stale 11.84 przez 40 epok, mAP=0.363). Z `classifier_cut`: normalna konwergencja. Same head jak w Wariancie K (F0b) z §7.3, ale F2_CE używa 40 epok dla spójności tabeli Fazy 2.
 
 ### Faza 3 — oś A (backbone)
 `{R18, R34, EB1, EB2, VGG16-BN} + S* + L*`. **5 przebiegów.** → wybieramy `B*`.
