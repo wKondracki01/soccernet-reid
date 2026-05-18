@@ -42,10 +42,10 @@ Wszystkie pretrenowane na ImageNet, wymieniona głowa → embedding `D = 512` (p
 | `R18` | ResNet-18 | 11 M | mały punkt odniesienia |
 | `R34` | ResNet-34 | 21 M | środek skali |
 | `EB1` | EfficientNet-B1 | 7 M | wydajny, pair dla R18 |
-| `EB3` | EfficientNet-B3 | 12 M | większy EB, próbka EfficientNet scaling |
+| `EB4` | EfficientNet-B4 | 19 M | większy EB, pair dla R34 |
 | `VGG16-BN` | VGG-16 z BatchNorm | 138 M | „starszy" baseline architektoniczny |
 
-> **Notatka o EB2/EB4**: pierwotnie plan zakładał `EB2` (9 M). Podczas Fazy 3 trening EB2 z PK-SA-BH sampler (batch=16) + AMP nie kończył się — 3 niezależne próby dały CUDA error w różnych miejscach kodu (`BatchHardMiner` lub `AMP scaler`), powtarzalnie nawet po reboot'cie i aktualizacji NVIDIA driver'a (591.86 → 596.49). EB1 w tej samej rodzinie nie miał problemu. Wybrano `EB3` (12 M) jako delikatniejszy krok scaling w obrębie rodziny EfficientNet niż początkowo rozważane EB4 (19 M) — zważywszy że R34 dał tylko +0.32pp nad R18 na tym datasecie, ryzyko overfittingu większego modelu jest realne, a EB3 jest bezpieczniejszym, bardziej proporcjonalnym wyborem.
+> **Notatka o EB2/EB3 (CUDA crashe)**: pierwotnie plan zakładał `EB2` (9 M). Trening EB2 z PK-SA-BH sampler (batch=16) + AMP crashował 3× pod rząd z `CUDA error: invalid argument` (różne miejsca: `BatchHardMiner` lub `AMP scaler`), powtarzalnie nawet po reboot'cie i update driver'a (591.86 → 596.49). Próba z **EB3** (12 M) dała identyczny crash w `scaler.step()` AMP — to wskazuje że bug jest **family-wide dla EfficientNet B2+ + AMP + small batch** (batch 16 z PK-SA-BH), niezależny od konkretnej skali. EB1 (7 M) jest stabilny — mniejsza głębokość/multiplier. Zostanie wybrane `EB4` (19 M) jako kandydat na większy punkt EfficientNet w tabeli; jeśli okaże się że również crashuje z AMP (oczekiwane biorąc pod uwagę wzorzec EB2/EB3), rozważymy AMP=false jako workaround z odpowiednim asteriskiem w tabeli, albo skip dla zachowania spójnej metodologii.
 
 (Opcjonalnie `VGG11-BN` dla pełniejszego pokrycia rodziny VGG.)
 
