@@ -41,9 +41,11 @@ Wszystkie pretrenowane na ImageNet, wymieniona głowa → embedding `D = 512` (p
 |-----|--------------|-----------:|-------|
 | `R18` | ResNet-18 | 11 M | mały punkt odniesienia |
 | `R34` | ResNet-34 | 21 M | środek skali |
-| `EB1` | EfficientNet-B1 | 7 M | wydajny |
-| `EB2` | EfficientNet-B2 | 9 M | trochę większy EB |
+| `EB1` | EfficientNet-B1 | 7 M | wydajny, pair dla R18 |
+| `EB4` | EfficientNet-B4 | 19 M | większy EB, pair dla R34 |
 | `VGG16-BN` | VGG-16 z BatchNorm | 138 M | „starszy" baseline architektoniczny |
+
+> **Notatka o EB2**: pierwotnie plan zakładał `EB2` (9 M) zamiast `EB4`. Podczas Fazy 3 trening EB2 z PK-SA-BH sampler (batch=16) + AMP nie kończył się — 3 niezależne próby dały CUDA error w różnych miejscach kodu (`BatchHardMiner` lub `AMP scaler`), powtarzalnie nawet po reboot'cie i aktualizacji NVIDIA driver'a (591.86 → 596.49). EB1 (mniejszy) i EB4 (większy) w tej samej rodzinie nie wykazywały problemu. Skala EB1 (7M) ≈ R18 (11M) i EB4 (19M) ≈ R34 (21M) daje czytelniejsze pairs comparison ResNet ↔ EfficientNet niż EB1/EB2 (oba ~7-9M, blisko siebie).
 
 (Opcjonalnie `VGG11-BN` dla pełniejszego pokrycia rodziny VGG.)
 
