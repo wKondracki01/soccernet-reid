@@ -20,8 +20,9 @@ _TIMM_NAMES: dict[str, str] = {
     "R34": "resnet34",
     "EB1": "efficientnet_b1",
     "EB2": "efficientnet_b2",
-    "VGG16-BN": "vgg16_bn",
     "VGG11-BN": "vgg11_bn",
+    "VGG16-BN": "vgg16_bn",
+    "VGG19-BN": "vgg19_bn",
 }
 
 
