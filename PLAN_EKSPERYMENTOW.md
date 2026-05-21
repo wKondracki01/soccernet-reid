@@ -43,13 +43,12 @@ Wszystkie pretrenowane na ImageNet, wymieniona głowa → embedding `D = 512` (p
 | `R34` | ResNet-34 | 21 M | środek skali |
 | `EB1` | EfficientNet-B1 | 7 M | wydajny EfficientNet, AMP=true |
 | `EB2`\* | EfficientNet-B2 | 9 M | większy EfficientNet, **AMP=false** (workaround dla bug'a opisanego niżej) |
-| `VGG11-BN` | VGG-11 z BatchNorm | 133 M | shallow VGG (8 conv layers) |
+| `VGG11-BN` | VGG-11 z BatchNorm | 131 M | shallow VGG (8 conv layers) |
 | `VGG16-BN` | VGG-16 z BatchNorm | 138 M | mid VGG (13 conv layers) |
-| `VGG19-BN` | VGG-19 z BatchNorm | 144 M | deep VGG (16 conv layers) |
 
 > **\*Notatka o EB2 + EfficientNet B2+ z AMP**: pierwotnie plan zakładał `EB2` jako drugi EfficientNet point. Trening EB2 z PK-SA-BH sampler (batch=16) + **AMP=true** crashował 3× pod rząd z `CUDA error: invalid argument` (różne miejsca: `BatchHardMiner` lub `AMP scaler`), powtarzalnie nawet po reboot'cie i update driver'a NVIDIA (591.86 → 596.49). Test z **EB3** (12 M) dał identyczny crash w `scaler.step()` AMP. Test z **EB4** (19 M) miał inny failure mode: trening nie crashował explicit'nie, ale eval mode dawał **identyczne mAP=0.2808 we wszystkich 4 epokach eval** (gorzej niż no-training baseline 0.3506) — wskazuje na FP16 underflow w BatchNorm running statistics, które propaguje przez momentum update do permanently corrupted running_mean/running_var. **Empirycznie potwierdzony root cause**: PyTorch AMP + EfficientNet B2+ (depthwise convs + dużo BN layers) + small batch (16 z PK-SA-BH) = numerical instability w FP16. **Rozwiązanie**: trening **EB2 z AMP=false (FP32)** — eliminuje source 3 różnych failure modes (eksperymentalnie zweryfikowane: F3_EB2 z AMP=false zakończyło 40 epok stabilnie z mAP=0.7054). Wybrano EB2 zamiast EB3/EB4 jako "wystarczająco większy" point ponieważ pattern z całej Fazy 3 (R18→R34 +0.32pp; EB1 7M bije R34 21M) wskazuje że na 225k próbkach skalowanie EfficientNet poza B1 przynosi diminishing returns. Asterisk dla EB2 w tabeli wynikowej: *"trained in FP32 (AMP disabled) due to documented PyTorch AMP+EfficientNet+small-batch instability; AMP-on vs AMP-off typically differs <0.5pp mAP in literature"*.
 
-VGG przedstawiony w 3 wariantach (shallow/mid/deep) zgodnie z briefem promotora o „wybranych wariantach VGG" — pozwala wyizolować efekt głębokości od pojemności (wszystkie VGG mają ~133-144 M params dzięki dense FC layers).
+VGG przedstawiony w 2 wariantach (shallow/mid) zgodnie z briefem promotora o „wybranych wariantach VGG" — pozwala wyizolować efekt głębokości od pojemności w rodzinie VGG (oba mają >130 M params dzięki dense FC layers).
 
 ### Oś B — funkcja straty
 Domyślnie embedding po L2-norm dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`) — kompatybilne z cosine similarity podczas retrievalu. `ARC` wymaga L2-norm z definicji (cosine margin). `CE` operuje na logitach z klasyfikatora — L2-norm embeddingu **nie jest wymagana** w treningu, ale jest stosowana w inferencji dla spójności metryki dystansu.
@@ -124,7 +123,7 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 > **Doprecyzowanie głowy modelu**: Faza 2 używa domyślnej głowy `projection` (BN→FC→BN→L2-norm) dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`) i dla `ARC` (ArcFace ma wewnętrzny scale=30 który neutralizuje saturację logitów). Wyjątek dla `CE`: musi używać głowy **`classifier_cut`** (raw features, bez L2-norm), ponieważ L2-norma na 138k-class CE classifierze powoduje saturację — logity skalują się do ~[-0.06, 0.06], softmax wychodzi praktycznie uniform, gradient zerowy, train loss zatrzymuje się na `ln(138852)≈11.84`. Empirycznie zweryfikowane (F2_CE v1 z projection head: train_loss stale 11.84 przez 40 epok, mAP=0.363). Z `classifier_cut`: normalna konwergencja. Same head jak w Wariancie K (F0b) z §7.3, ale F2_CE używa 40 epok dla spójności tabeli Fazy 2.
 
 ### Faza 3 — oś A (backbone)
-`{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN, VGG19-BN} + S* + L*`. **7 wpisów łącznie** (R18 reuse z F1_PK_SA_BH, pozostałe 6 to nowe runy). → wybieramy `B*`.
+`{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN} + S* + L*`. **6 wpisów łącznie** (R18 reuse z F1_PK_SA_BH, pozostałe 5 to nowe runy). → wybieramy `B*`.
 
 ### Faza 4 — oś D (augmentacje)
 `B* + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG}`. **3 przebiegi.** → wykres „augmentacja vs. mAP".
@@ -132,7 +131,7 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 ### Faza 5 — interakcje
 2–3 najciekawsze kombinacje wybrane na podstawie poprzednich faz (np. czy mocne augmentacje pomagają tylko większym backbone'om; czy MS+`PK-BH-XBM` bije CircleLoss+`PK-BH` na każdym backbone). **6–9 przebiegów.**
 
-**Łącznie Fazy 0–5**: ~27–32 pełnych przebiegów + sanity checks (po rozszerzeniu Fazy 3 o VGG11-BN i VGG19-BN — łącznie 7 backbone'ów w skali).
+**Łącznie Fazy 0–5**: ~26–31 pełnych przebiegów + sanity checks (Faza 3 = 6 backbone'ów: R18, R34, EB1, EB2, VGG11-BN, VGG16-BN).
 **Plus ablacje §7**: ~12–15 dodatkowych **treningów** (§7.1: 3 warianty głowy = 3, distance to wybór inferencji bez kosztu; §7.2 wymiar D: 5; §7.3 hybrydowy wariant H: 1 dodatkowy; §7.4 pretraining: 1; §7.5 pooling: 1; §7.6/§7.7 darmowe — post-hoc / z istniejących checkpointów; §7.8 efekt K: 2). Wariant K i Wariant M w §7.3 są już w F0b i Fazie 5 — nie liczymy podwójnie.
 **Razem**: **~40–45 przebiegów** (~27-32 z Faz 0-5 + 12-15 z ablacji §7).
 
@@ -168,7 +167,7 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 - **Optymalizator**: Adam(lr=3.5e-4, wd=5e-4), cosine schedule z warmup 5 epok.
 - **Definicja epoki**: przy samplerach PK-style jeden batch nie odpowiada „przeglądowi datasetu". Przyjmujemy **epoka = 5000 iteracji** (≈ jeden przegląd 225 k próbek dla batcha 32; PK-SA z batch 16 widzi w sumie połowę próbek na epokę — patrz uwaga w §3 o porównywalności samplerów).
 - **Epoki**: 60 (plateau na podobnych re-id setupach ok. 40–50). W Fazach 1–3 można skrócić do 40 epok i tylko najlepsze konfiguracje przedłużyć do 60.
-- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Dostępna pamięć GPU: **RTX 3080 Laptop = 16 GB VRAM** (zweryfikowane przez `nvidia-smi`), wszystkie backbone'y z planu (R18..VGG19-BN) mieszczą się w batch=32 + AMP bez kompromisów — cloud nie jest konieczny dla Faz 1-5. Wyjątek: EB2 wymaga AMP=false (patrz §2.A footnote).
+- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Dostępna pamięć GPU: **RTX 3080 Laptop = 16 GB VRAM** (zweryfikowane przez `nvidia-smi`), wszystkie backbone'y z planu (R18..VGG16-BN) mieszczą się w batch=32 + AMP bez kompromisów — cloud nie jest konieczny dla Faz 1-5. Wyjątek: EB2 wymaga AMP=false (patrz §2.A footnote).
 - **Mixed precision (AMP)** — przyspiesza ~2×.
 - **Seedy**: 3 seedy per kluczowy przebieg w Fazach 3/4/5 → raportujemy średnią ± odch. std. Faza 1/2: 1 seed.
 - **Logowanie**: TensorBoard + CSV (loss, lr, valid mAP/R-1 co N epok); checkpoint best-mAP; pełna konfiguracja (Hydra) zapisana w katalogu eksperymentu.
