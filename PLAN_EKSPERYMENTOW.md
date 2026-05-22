@@ -92,6 +92,12 @@ Wejście: bbox o zmiennym H×W → resize do **256×128** (standard person re-id
 
 Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Świadomie nie stosujemy **MixUp/CutMix** — te augmentacje mieszają etykiety, co działa tylko w klasyfikacji (CE/ARC); w stratach metric learning (CONT/TRI/MS/CIRCLE) nie istnieje „częściowo pozytywna para", więc miksowanie obrazów psułoby mining. AUG-STRONG musi działać z każdą stratą z Osi B, dlatego ograniczamy się do augmentacji obrazo-tylko.
 
+**Pochodzenie AUG-BOT** (czwarty zestaw, alternatywa ReID-świadoma do AUG-STRONG): receptura zaczerpnięta z dwóch fundamentalnych prac person ReID:
+- **Luo et al., 2019** — *"Bag of Tricks and a Strong Baseline for Deep Person Re-Identification"* (CVPRW 2019, [arXiv:1903.07071](https://arxiv.org/abs/1903.07071)), w skrócie **BoT-ReID**. Praca ta zebrała w jeden spójny pipeline „triki" które empirycznie podnoszą mAP na Market-1501/DukeMTMC bez zmiany architektury: warmup LR, BNNeck, label smoothing, center loss + triplet — oraz konkretny zestaw augmentacji: horizontal flip + padding+crop + Random Erasing + ColorJitter + **RandomGrayscale (p=0.1, my używamy p=0.2)**. RandomGrayscale to ich signature ingredient — wymusza features niezależne od koloru w 10–20% próbek.
+- **Wang et al., 2018** — *"Learning Discriminative Features with Multiple Granularities for Person Re-Identification"* ([arXiv:1804.01438](https://arxiv.org/abs/1804.01438)), w skrócie **MGN**. Multi-Granularity Network, jedna z dominujących architektur ReID 2018-2020. Również używa RandomGrayscale + RandomErasing jako kanonu, potwierdzając że to nie była przypadkowa heurystyka Luo 2019.
+
+Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-policy, brak RandomPerspective, brak GaussianBlur**. Te augmentacje są tunowane pod *class-level invariance* (kot to kot niezależnie od pozy/oświetlenia), a ReID wymaga przeciwnie — *instance-level discrimination* (Liverpool red shirt #11 ≠ Liverpool red shirt #14, mimo identycznej klasy = "Player_team_left"). Dlatego AUG-BOT celowo odcina komponenty AUG-STRONG które niosą tę „klasyfikacyjną" filozofię, zostawiając tylko domain-appropriate occlusion (RE) + photometric jitter + grayscale forcing.
+
 ---
 
 ## 3. Macierz eksperymentów — podejście etapowe
