@@ -87,8 +87,8 @@ Wejście: bbox o zmiennym H×W → resize do **256×128** (standard person re-id
 |--------|-------|
 | `AUG-MIN` | resize, horizontal flip, normalizacja |
 | `AUG-MED` | AUG-MIN + ColorJitter (0.2/0.2/0.2/0.05), RandomCrop z paddingiem, Random Erasing (p=0.5) |
-| `AUG-STRONG` | AUG-MED + RandAugment (n=2, m=9), Gaussian blur, RandomPerspective (p=0.3), mocniejsze RE (p=0.7, większy zakres scale/ratio) |
-| `AUG-BOT` | ReID-aware "strong" wg BoT-ReID (Luo 2019, "Bag of Tricks for ReID"): AUG-MED features + **RandomGrayscale** (p=0.2), stronger ColorJitter (0.4/0.4/0.4/0.1), stronger RE (p=0.7). **Bez** RandAugment/Perspective/Blur (te są tunowane pod ImageNet classification i niszczą instance-level cues w person-crops). |
+| `AUG-STRONG` | AUG-MED + RandAugment (n=2, m=9), Gaussian blur, RandomPerspective (p=0.3), RE p=0.5 (Zhong default; pierwsza wersja z p=0.7 powodowała collapse na SoccerNet — patrz git history) |
+| `AUG-BOT` | ReID-aware "strong" wg BoT-ReID (Luo 2019, "Bag of Tricks for ReID"): AUG-MED features + **RandomGrayscale** (p=0.2), stronger ColorJitter (0.4/0.4/0.4/0.1), RE p=0.5 (BoT-ReID/Zhong default). **Bez** RandAugment/Perspective/Blur (te są tunowane pod ImageNet classification i niszczą instance-level cues w person-crops). |
 
 Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Świadomie nie stosujemy **MixUp/CutMix** — te augmentacje mieszają etykiety, co działa tylko w klasyfikacji (CE/ARC); w stratach metric learning (CONT/TRI/MS/CIRCLE) nie istnieje „częściowo pozytywna para", więc miksowanie obrazów psułoby mining. AUG-STRONG musi działać z każdą stratą z Osi B, dlatego ograniczamy się do augmentacji obrazo-tylko.
 

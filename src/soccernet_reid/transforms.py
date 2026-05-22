@@ -4,11 +4,11 @@ Presets:
     "eval"       — no augmentation, just resize + normalize. Used for valid/test.
     "aug-min"    — eval + horizontal flip. The weakest training transform.
     "aug-med"    — aug-min + ColorJitter + RandomCrop with padding + Random Erasing.
-    "aug-strong" — aug-med + RandAugment + GaussianBlur + RandomPerspective + stronger RE.
-                   (Note: empirically collapses TripletLoss on SoccerNet — too aggressive
-                   for instance-level retrieval. Kept for comparison.)
+    "aug-strong" — aug-med + RandAugment + GaussianBlur + RandomPerspective. RE at p=0.5
+                   (Zhong default). First version used p=0.7 + scale=(0.02, 0.4) and
+                   collapsed on SoccerNet narrow crops — see git history.
     "aug-bot"   — ReID-aware "strong": aug-med features + RandomGrayscale + stronger
-                   ColorJitter + stronger RE. No RandAugment/Perspective/Blur (those are
+                   ColorJitter + RE p=0.5. No RandAugment/Perspective/Blur (those are
                    ImageNet-classification-tuned and hurt instance discrimination).
                    Recipe follows BoT-ReID (Luo 2019) / MGN (Wang 2018).
 
@@ -102,7 +102,10 @@ def build_transform(
                 v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
                 v2.RandomPerspective(distortion_scale=0.2, p=0.3),
                 *postamble,
-                v2.RandomErasing(p=0.7, scale=(0.02, 0.4)),
+                # RE p=0.5 (Zhong et al. default). First attempt used p=0.7 +
+                # scale=(0.02, 0.4) which on SoccerNet's narrow 256x128 crops
+                # contributed to a training collapse (mAP frozen at 0.28).
+                v2.RandomErasing(p=0.5, scale=(0.02, 0.4)),
             ]
         )
 
@@ -110,7 +113,7 @@ def build_transform(
     # ReID-aware "strong": no RandAugment/Perspective/Blur (those are tuned for
     # ImageNet classification and destroy instance-discriminative cues for ReID).
     # Adds RandomGrayscale (BoT-ReID/MGN canonical), stronger ColorJitter,
-    # stronger Random Erasing.
+    # Random Erasing at the BoT-ReID / Zhong et al. default p=0.5.
     return v2.Compose(
         [
             *preamble,
@@ -120,6 +123,6 @@ def build_transform(
             v2.Pad(pad),
             v2.RandomCrop((height, width)),
             *postamble,
-            v2.RandomErasing(p=0.7, scale=(0.02, 0.4), ratio=(0.3, 3.3)),
+            v2.RandomErasing(p=0.5, scale=(0.02, 0.4), ratio=(0.3, 3.3)),
         ]
     )
