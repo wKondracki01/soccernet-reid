@@ -32,7 +32,7 @@
 
 ## 2. Cztery osie eksperymentalne
 
-Pełny iloczyn kartezjański (7 backbone'ów × 6 strat × 5 samplerów × 3 augmentacje = 630 przebiegów) jest niewykonalny. Stosujemy **podejście „krzyżowe"**: ustalamy *baseline* na każdej osi, zmieniamy jedną oś naraz, a najlepsze kombinacje testujemy w fazie końcowej.
+Pełny iloczyn kartezjański (6 backbone'ów × 6 strat × 5 samplerów × 4 augmentacje = 720 przebiegów) jest niewykonalny. Stosujemy **podejście „krzyżowe"**: ustalamy *baseline* na każdej osi, zmieniamy jedną oś naraz, a najlepsze kombinacje testujemy w fazie końcowej.
 
 ### Oś A — backbone (ekstraktor cech)
 Wszystkie pretrenowane na ImageNet, wymieniona głowa → embedding `D = 512` (po BNNeck + L2-norm).
@@ -80,14 +80,15 @@ Testujemy 5 pakietów (a nie pełen iloczyn 3×3) — w pracy zaznaczamy, że ni
 | `PK-SA-BH` | PK-per-action | BATCH-HARD | — | zgodne z protokołem ewaluacji |
 | `PK-BH-XBM` | PK | BATCH-HARD | Cross-Batch Memory | bank cech, dla MS / CircleLoss |
 
-### Oś D — augmentacje (3 zestawy z tematu)
+### Oś D — augmentacje (4 zestawy: 3 z tematu + 1 alternatywa ReID-świadoma)
 Wejście: bbox o zmiennym H×W → resize do **256×128** (standard person re-id), normalizacja ImageNet.
 
 | Zestaw | Skład |
 |--------|-------|
 | `AUG-MIN` | resize, horizontal flip, normalizacja |
 | `AUG-MED` | AUG-MIN + ColorJitter (0.2/0.2/0.2/0.05), RandomCrop z paddingiem, Random Erasing (p=0.5) |
-| `AUG-STRONG` | AUG-MED + RandAugment (n=2, m=9), Gaussian blur, RandomPerspective (p=0.3), AutoAugment policy „imagenet", mocniejsze RE (p=0.7, większy zakres scale/ratio) |
+| `AUG-STRONG` | AUG-MED + RandAugment (n=2, m=9), Gaussian blur, RandomPerspective (p=0.3), mocniejsze RE (p=0.7, większy zakres scale/ratio) |
+| `AUG-BOT` | ReID-aware "strong" wg BoT-ReID (Luo 2019, "Bag of Tricks for ReID"): AUG-MED features + **RandomGrayscale** (p=0.2), stronger ColorJitter (0.4/0.4/0.4/0.1), stronger RE (p=0.7). **Bez** RandAugment/Perspective/Blur (te są tunowane pod ImageNet classification i niszczą instance-level cues w person-crops). |
 
 Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Świadomie nie stosujemy **MixUp/CutMix** — te augmentacje mieszają etykiety, co działa tylko w klasyfikacji (CE/ARC); w stratach metric learning (CONT/TRI/MS/CIRCLE) nie istnieje „częściowo pozytywna para", więc miksowanie obrazów psułoby mining. AUG-STRONG musi działać z każdą stratą z Osi B, dlatego ograniczamy się do augmentacji obrazo-tylko.
 
@@ -126,16 +127,16 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 `{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN} + S* + L*`. **6 wpisów łącznie** (R18 reuse z F1_PK_SA_BH, pozostałe 5 to nowe runy). → wybieramy `B*`.
 
 ### Faza 4 — oś D (augmentacje)
-`B* + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG}`. **3 przebiegi.** → wykres „augmentacja vs. mAP".
+`B* + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG, AUG-BOT}`. **4 wpisy** (AUG-MIN reuse z F3, pozostałe 3 to nowe runy). → wykres „augmentacja vs. mAP".
 
 ### Faza 5 — interakcje
 2–3 najciekawsze kombinacje wybrane na podstawie poprzednich faz (np. czy mocne augmentacje pomagają tylko większym backbone'om; czy MS+`PK-BH-XBM` bije CircleLoss+`PK-BH` na każdym backbone). **6–9 przebiegów.**
 
-**Łącznie Fazy 0–5**: ~26–31 pełnych przebiegów + sanity checks (Faza 3 = 6 backbone'ów: R18, R34, EB1, EB2, VGG11-BN, VGG16-BN).
+**Łącznie Fazy 0–5**: ~27–32 pełnych przebiegów + sanity checks (Faza 3 = 6 backbone'ów: R18, R34, EB1, EB2, VGG11-BN, VGG16-BN; Faza 4 = 4 zestawy augmentacji).
 **Plus ablacje §7**: ~12–15 dodatkowych **treningów** (§7.1: 3 warianty głowy = 3, distance to wybór inferencji bez kosztu; §7.2 wymiar D: 5; §7.3 hybrydowy wariant H: 1 dodatkowy; §7.4 pretraining: 1; §7.5 pooling: 1; §7.6/§7.7 darmowe — post-hoc / z istniejących checkpointów; §7.8 efekt K: 2). Wariant K i Wariant M w §7.3 są już w F0b i Fazie 5 — nie liczymy podwójnie.
-**Razem**: **~40–45 przebiegów** (~27-32 z Faz 0-5 + 12-15 z ablacji §7).
+**Razem**: **~41–46 przebiegów** (~27-32 z Faz 0-5 + 12-15 z ablacji §7).
 
-**Realny czas**: dla 225k próbek przy batch 32 (5000 iter/epoka, def. §5) i 60 epokach jeden przebieg R18 to ok. **2–4 h** na GPU klasy 3080/A6000 (mniejszy batch + krótsza forward niż w Market-1501 setup). Dla EB2 (z AMP=false workaround) / VGG11-16-19 ok. **4–7 h** per backbone. Łączny budżet GPU: **5–12 dni ciągłej pracy** (1 GPU), realnie 2–3 tyg. z przerwami. Akceleratory: AMP (gdzie nie crashuje), skrócenie do 40 epok w Fazach 1–3, checkpoint co N epok + early-stop przy braku poprawy mAP przez 10 epok.
+**Realny czas**: dla 225k próbek przy batch 32 (5000 iter/epoka, def. §5) i 60 epokach jeden przebieg R18 to ok. **2–4 h** na GPU klasy 3080/A6000 (mniejszy batch + krótsza forward niż w Market-1501 setup). Dla EB2 (z AMP=false workaround) / VGG11-16 ok. **4–7 h** per backbone. Łączny budżet GPU: **5–12 dni ciągłej pracy** (1 GPU), realnie 2–3 tyg. z przerwami. Akceleratory: AMP (gdzie nie crashuje), skrócenie do 40 epok w Fazach 1–3, checkpoint co N epok + early-stop przy braku poprawy mAP przez 10 epok.
 
 **Uwaga o porównywalności samplerów (Faza 1)**: PK-SA ma efektywny batch 16 vs. 32 dla pozostałych — utrzymujemy **tę samą liczbę iteracji (=update'ów wagowych)** dla wszystkich, akceptując że PK-SA widzi w sumie połowę próbek. Alternatywa „same próbki widziane" wymagałaby 2× więcej iteracji dla PK-SA i mieszałaby budżet z efektem samplera. Decyzja udokumentowana w pracy.
 
@@ -152,7 +153,7 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 4. **Singletony — bez explicit'nego filtra na katalogu**. Para `(action, uid)` z 1 próbką nie generuje pozytywnej pary, więc dla strat metric jest „bezużyteczna jako anchor". Ale **PK-style samplery (PK, PK-SA, SEMI, XBM) wybierają tylko klasy z ≥K próbek — singletony są naturalnie pomijane na poziomie batcha** bez ruszania katalogu. Dla strat klasyfikacyjnych (`CE`, `ArcFace`) singletony są w pełni użyteczne (każda osoba dostaje jeden gradient na FC; tak działa rozpoznawanie twarzy na MS-Celeb-1M / ArcFace). Wniosek: trzymamy pełen katalog (po filtrze klas), każdy sampler/strata używa go zgodnie ze swoją naturą. Liczby do raportu: 138 861 par `(action, uid)` po filtrze klas; z tego 76 147 (54.8%) singletonów (=trafia tylko do losowego samplera) i 62 714 par ≥2-próbkowych (=trafia też do PK-samplerów). To dataset-specyficzny rozkład udokumentowany w pracy (kontrast z Market-1501, gdzie ID mają 15–30 zdjęć).
 5. **Sampler `PKPerActionBatchSampler`**: w każdym batchu wybiera 1 akcję, z niej P tożsamości × K próbek (próg odcięcia: ID musi mieć ≥K próbek w tej akcji). Wariant `PK` wybiera ID cross-action z tym samym progiem.
 6. **Resize do 256×128** z paddingiem zachowującym aspekt (mini-ablacja: czy zachowanie aspektu pomaga).
-7. **Augmentacje** — moduł z 3 presetami przełączanymi z configu (Albumentations lub torchvision v2).
+7. **Augmentacje** — moduł z 4 presetami przełączanymi z configu (Albumentations lub torchvision v2).
 
 ---
 

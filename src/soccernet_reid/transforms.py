@@ -5,6 +5,12 @@ Presets:
     "aug-min"    — eval + horizontal flip. The weakest training transform.
     "aug-med"    — aug-min + ColorJitter + RandomCrop with padding + Random Erasing.
     "aug-strong" — aug-med + RandAugment + GaussianBlur + RandomPerspective + stronger RE.
+                   (Note: empirically collapses TripletLoss on SoccerNet — too aggressive
+                   for instance-level retrieval. Kept for comparison.)
+    "aug-bot"   — ReID-aware "strong": aug-med features + RandomGrayscale + stronger
+                   ColorJitter + stronger RE. No RandAugment/Perspective/Blur (those are
+                   ImageNet-classification-tuned and hurt instance discrimination).
+                   Recipe follows BoT-ReID (Luo 2019) / MGN (Wang 2018).
 
 MixUp / CutMix are deliberately omitted (see plan §2.D): they require label
 mixing which is incompatible with pair-based metric learning losses.
@@ -22,8 +28,8 @@ from torchvision.transforms import v2
 IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
 
-TransformLevel = Literal["eval", "aug-min", "aug-med", "aug-strong"]
-_LEVELS: tuple[str, ...] = ("eval", "aug-min", "aug-med", "aug-strong")
+TransformLevel = Literal["eval", "aug-min", "aug-med", "aug-strong", "aug-bot"]
+_LEVELS: tuple[str, ...] = ("eval", "aug-min", "aug-med", "aug-strong", "aug-bot")
 
 
 def build_transform(
@@ -83,19 +89,37 @@ def build_transform(
             ]
         )
 
-    # level == "aug-strong"
+    if level == "aug-strong":
+        return v2.Compose(
+            [
+                *preamble,
+                v2.RandomHorizontalFlip(p=0.5),
+                v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
+                v2.Pad(pad),
+                v2.RandomCrop((height, width)),
+                # RandAugment / AutoAugment expect uint8 tensors -> still pre-postamble.
+                v2.RandAugment(num_ops=2, magnitude=9),
+                v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+                v2.RandomPerspective(distortion_scale=0.2, p=0.3),
+                *postamble,
+                v2.RandomErasing(p=0.7, scale=(0.02, 0.4)),
+            ]
+        )
+
+    # level == "aug-bot"
+    # ReID-aware "strong": no RandAugment/Perspective/Blur (those are tuned for
+    # ImageNet classification and destroy instance-discriminative cues for ReID).
+    # Adds RandomGrayscale (BoT-ReID/MGN canonical), stronger ColorJitter,
+    # stronger Random Erasing.
     return v2.Compose(
         [
             *preamble,
             v2.RandomHorizontalFlip(p=0.5),
-            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
+            v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+            v2.RandomGrayscale(p=0.2),
             v2.Pad(pad),
             v2.RandomCrop((height, width)),
-            # RandAugment / AutoAugment expect uint8 tensors → still pre-postamble.
-            v2.RandAugment(num_ops=2, magnitude=9),
-            v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
-            v2.RandomPerspective(distortion_scale=0.2, p=0.3),
             *postamble,
-            v2.RandomErasing(p=0.7, scale=(0.02, 0.4)),
+            v2.RandomErasing(p=0.7, scale=(0.02, 0.4), ratio=(0.3, 3.3)),
         ]
     )
