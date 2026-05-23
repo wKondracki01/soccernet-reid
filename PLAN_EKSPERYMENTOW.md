@@ -136,7 +136,31 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 `B* + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG, AUG-BOT}`. **4 wpisy** (AUG-MIN reuse z F3, pozostałe 3 to nowe runy). → wykres „augmentacja vs. mAP".
 
 ### Faza 5 — interakcje
-2–3 najciekawsze kombinacje wybrane na podstawie poprzednich faz (np. czy mocne augmentacje pomagają tylko większym backbone'om; czy MS+`PK-BH-XBM` bije CircleLoss+`PK-BH` na każdym backbone). **6–9 przebiegów.**
+Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 epok** (zamiast 40 z Faz 1-3) — finalna konfiguracja zasługuje na pełny budżet czasowy, a krzywa AUG-MED w Fazie 4 wciąż rosła w ep 40.
+
+**Wybór 6 runów** podzielony na 4 grupy pytań:
+
+**A. Finalna referencja (Wariant M do §7.3)**
+| ID | Config | Pytanie |
+|---|---|---|
+| `F5_REF` | `EB1 + TRI + PK-SA + AUG-MED, 60ep, AMP=true` | Czy 60ep przebije 0.7417 z 40ep (krzywa rosła)? To jest **Wariant M** używany potem w ablacji §7.3 vs Wariant K (CE) i Wariant H (hybryda) |
+
+**B. Najbliżsi rywale z pełnym stackiem** (czy ranking z Faz 2/3 utrzyma się przy A* i 60ep?)
+| ID | Config | Pytanie |
+|---|---|---|
+| `F5_CIRCLE_PKSA` | `EB1 + CIRCLE + PK-SA + AUG-MED, 60ep` | W Fazie 2 CIRCLE=TRI w noise (Δ<1pp). Z AUG-MED + 60ep może wygrać? Test L*=CIRCLE alternative |
+| `F5_R34_AUG` | `R34 + TRI + PK-SA + AUG-MED, 60ep` | Plan literalnie pyta "czy AUG-MED pomaga większym backbone'om?" R34 miał Δ=1.7pp do EB1 z AUG-MIN — czy AUG-MED zamyka lukę? |
+| `F5_EB2_AUG` | `EB2 + TRI + PK-SA + AUG-MED, 60ep, AMP=false` | EB2 był 2. w Fazie 3 (Δ 0.5pp do EB1). Z AUG-MED może bije EB1 jako finalne B*? |
+
+**C. Interakcje sampler × loss**
+| ID | Config | Pytanie |
+|---|---|---|
+| `F5_CIRCLE_XBM` | `EB1 + CIRCLE + PK-BH-XBM + AUG-MED, 60ep` | XBM zaszkodził TRI w Fazie 1, ale CIRCLE używa par inaczej. Plan literalnie wymienia "CircleLoss + PK-BH-XBM" jako kandydata. |
+| `F5_PKBH_EB1` | `EB1 + TRI + PK-BH + AUG-MED, 60ep` | W Fazie 1 PK-SA pokonał PK-BH cross-action o +8pp (na R18+AUG-MIN). Z lepszym stackiem — czy gap się utrzymuje, czy PK-SA był backbone/aug-dependent? |
+
+**Budżet Fazy 5**: 6 runów × ~6h/run (60ep) = ~36h GPU ≈ 1.5 doby.
+
+**Mapowanie do tabeli E** (§6 raportowanie): tabela porównawcza wszystkich 6 kombinacji + wykres CMC dla top-3 + wybór Wariantu M.
 
 **Łącznie Fazy 0–5**: ~27–32 pełnych przebiegów + sanity checks (Faza 3 = 6 backbone'ów: R18, R34, EB1, EB2, VGG11-BN, VGG16-BN; Faza 4 = 4 zestawy augmentacji).
 **Plus ablacje §7**: ~12–15 dodatkowych **treningów** (§7.1: 3 warianty głowy = 3, distance to wybór inferencji bez kosztu; §7.2 wymiar D: 5; §7.3 hybrydowy wariant H: 1 dodatkowy; §7.4 pretraining: 1; §7.5 pooling: 1; §7.6/§7.7 darmowe — post-hoc / z istniejących checkpointów; §7.8 efekt K: 2). Wariant K i Wariant M w §7.3 są już w F0b i Fazie 5 — nie liczymy podwójnie.
