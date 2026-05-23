@@ -143,20 +143,20 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 **A. Finalna referencja (Wariant M do §7.3)**
 | ID | Config | Pytanie |
 |---|---|---|
-| `F5_REF` | `EB1 + TRI + PK-SA + AUG-MED, 60ep, AMP=true` | Czy 60ep przebije 0.7417 z 40ep (krzywa rosła)? To jest **Wariant M** używany potem w ablacji §7.3 vs Wariant K (CE) i Wariant H (hybryda) |
+| `F5_REF` | `EB1 + TRI + PK-SA + AUG-MED, 60ep, AMP=false` | Czy 60ep przebije 0.7417 z 40ep (krzywa rosła)? To jest **Wariant M** używany potem w ablacji §7.3 vs Wariant K (CE) i Wariant H (hybryda) |
 
 **B. Najbliżsi rywale z pełnym stackiem** (czy ranking z Faz 2/3 utrzyma się przy A* i 60ep?)
 | ID | Config | Pytanie |
 |---|---|---|
-| `F5_CIRCLE_PKSA` | `EB1 + CIRCLE + PK-SA + AUG-MED, 60ep` | W Fazie 2 CIRCLE=TRI w noise (Δ<1pp). Z AUG-MED + 60ep może wygrać? Test L*=CIRCLE alternative |
-| `F5_R34_AUG` | `R34 + TRI + PK-SA + AUG-MED, 60ep` | Plan literalnie pyta "czy AUG-MED pomaga większym backbone'om?" R34 miał Δ=1.7pp do EB1 z AUG-MIN — czy AUG-MED zamyka lukę? |
+| `F5_CIRCLE_PKSA` | `EB1 + CIRCLE + PK-SA + AUG-MED, 60ep, AMP=false` | W Fazie 2 CIRCLE=TRI w noise (Δ<1pp). Z AUG-MED + 60ep może wygrać? Test L*=CIRCLE alternative |
+| `F5_R34_AUG` | `R34 + TRI + PK-SA + AUG-MED, 60ep, AMP=false` | Plan literalnie pyta "czy AUG-MED pomaga większym backbone'om?" R34 miał Δ=1.7pp do EB1 z AUG-MIN — czy AUG-MED zamyka lukę? |
 | `F5_EB2_AUG` | `EB2 + TRI + PK-SA + AUG-MED, 60ep, AMP=false` | EB2 był 2. w Fazie 3 (Δ 0.5pp do EB1). Z AUG-MED może bije EB1 jako finalne B*? |
 
 **C. Interakcje sampler × loss**
 | ID | Config | Pytanie |
 |---|---|---|
-| `F5_CIRCLE_XBM` | `EB1 + CIRCLE + PK-BH-XBM + AUG-MED, 60ep` | XBM zaszkodził TRI w Fazie 1, ale CIRCLE używa par inaczej. Plan literalnie wymienia "CircleLoss + PK-BH-XBM" jako kandydata. |
-| `F5_PKBH_EB1` | `EB1 + TRI + PK-BH + AUG-MED, 60ep` | W Fazie 1 PK-SA pokonał PK-BH cross-action o +8pp (na R18+AUG-MIN). Z lepszym stackiem — czy gap się utrzymuje, czy PK-SA był backbone/aug-dependent? |
+| `F5_CIRCLE_XBM` | `EB1 + CIRCLE + PK-BH-XBM + AUG-MED, 60ep, AMP=false` | XBM zaszkodził TRI w Fazie 1, ale CIRCLE używa par inaczej. Plan literalnie wymienia "CircleLoss + PK-BH-XBM" jako kandydata. |
+| `F5_PKBH_EB1` | `EB1 + TRI + PK-BH + AUG-MED, 60ep, AMP=false` | W Fazie 1 PK-SA pokonał PK-BH cross-action o +8pp (na R18+AUG-MIN). Z lepszym stackiem — czy gap się utrzymuje, czy PK-SA był backbone/aug-dependent? |
 
 **Budżet Fazy 5**: 6 runów × ~6h/run (60ep) = ~36h GPU ≈ 1.5 doby.
 
