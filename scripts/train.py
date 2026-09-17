@@ -25,6 +25,9 @@ from pathlib import Path
 
 import hydra
 import pandas as pd
+# Must precede torch: on Windows, loading pyarrow's dataset DLLs after torch crashes
+# the process (see scripts/eval_checkpoint.py). pandas alone does not guarantee it.
+import pyarrow.dataset  # noqa: F401
 import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, RandomSampler

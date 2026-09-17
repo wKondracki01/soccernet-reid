@@ -36,6 +36,10 @@ import json
 import sys
 from pathlib import Path
 
+# On Windows, loading pyarrow's dataset DLLs after torch kills the process with an
+# access violation and no traceback (reading the catalog parquet exited with code 1).
+# Import it before torch.
+import pyarrow.dataset  # noqa: F401
 import torch
 
 # Allow running without `uv run -m ...`

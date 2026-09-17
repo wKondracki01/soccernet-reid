@@ -20,6 +20,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+# Must precede torch: on Windows, loading pyarrow's dataset DLLs after torch crashes
+# the process (see scripts/eval_checkpoint.py).
+import pyarrow.dataset  # noqa: F401
 import torch
 from torch.utils.data import DataLoader
 
