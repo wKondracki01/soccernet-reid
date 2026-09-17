@@ -1,11 +1,17 @@
 """Unit tests for the loss factory. Synthetic embeddings/labels, no real data."""
 from __future__ import annotations
 
+import math
+from pathlib import Path
+
 import pytest
 import torch
 import torch.nn.functional as F
+import yaml
 
-from soccernet_reid.losses import build_loss
+from soccernet_reid.losses import build_loss, check_head_loss_compatibility
+
+LOSS_CONFIG_DIR = Path(__file__).resolve().parent.parent / "configs" / "loss"
 
 
 # Use a PK-like batch: 4 classes × 2 samples = 8
@@ -85,11 +91,65 @@ class TestHyperparameters:
         assert torch.isfinite(out)
 
     def test_arc_margin_and_scale_override(self) -> None:
+        # margin is in degrees for pml's ArcFaceLoss
         m = build_loss("arc", embedding_dim=D, num_classes=NUM_CLASSES,
-                       margin=0.4, scale=20.0)
+                       margin=20.0, scale=20.0)
+        assert m.call.arc.margin == pytest.approx(math.radians(20.0))
+        assert m.call.arc.scale == pytest.approx(20.0)
         emb, lbl = _random_pk_batch()
         out = m.call(emb, lbl)
         assert torch.isfinite(out)
+
+    def test_arc_default_margin_is_half_a_radian(self) -> None:
+        # Regression: 0.5 used to be passed straight to pml, which reads degrees,
+        # so ArcFace trained with a 0.5 deg (~0.0087 rad) margin.
+        m = build_loss("arc", embedding_dim=D, num_classes=NUM_CLASSES)
+        assert m.call.arc.margin == pytest.approx(0.5, abs=1e-3)
+
+    def test_arc_config_file_margin_is_half_a_radian(self) -> None:
+        cfg = yaml.safe_load((LOSS_CONFIG_DIR / "arc.yaml").read_text())
+        name = cfg.pop("name")
+        m = build_loss(name, embedding_dim=D, num_classes=NUM_CLASSES, **cfg)
+        assert m.call.arc.margin == pytest.approx(0.5, abs=1e-3)
+        assert m.call.arc.scale == pytest.approx(30.0)
+
+    @pytest.mark.parametrize(
+        ("name", "bad_key"),
+        [("circle", "margin"), ("tri", "m"), ("ms", "epsilon"), ("ce", "margin"), ("arc", "gamma")],
+    )
+    def test_unknown_hyperparameter_raises(self, name: str, bad_key: str) -> None:
+        # Regression: unknown keys used to be ignored silently.
+        num_classes = NUM_CLASSES if name in ("ce", "arc") else None
+        with pytest.raises(ValueError, match="does not accept hyperparameter"):
+            build_loss(name, embedding_dim=D, num_classes=num_classes, **{bad_key: 0.1})
+
+
+@pytest.mark.parametrize("config_path", sorted(LOSS_CONFIG_DIR.glob("*.yaml")), ids=lambda p: p.stem)
+def test_every_loss_config_file_builds(config_path: Path) -> None:
+    """Every configs/loss/*.yaml must be accepted by build_loss as train.py passes it."""
+    cfg = yaml.safe_load(config_path.read_text())
+    name = cfg.pop("name")
+    num_classes = NUM_CLASSES if name in ("ce", "arc") else None
+    module = build_loss(name, embedding_dim=D, num_classes=num_classes, **cfg)
+    emb, lbl = _random_pk_batch()
+    assert torch.isfinite(module.call(emb, lbl))
+
+
+class TestHeadLossCompatibility:
+    @pytest.mark.parametrize("head", ["projection", "bnneck"])
+    def test_ce_with_l2_normalised_head_raises(self, head: str) -> None:
+        # Regression: F2_CE v1 (CE + projection) sat at ln(num_classes) for 40 epochs.
+        with pytest.raises(ValueError, match="loss=ce cannot be trained"):
+            check_head_loss_compatibility(head, "ce")
+
+    @pytest.mark.parametrize(
+        ("head", "loss"),
+        [("classifier_cut", "ce"), ("plain", "ce"), ("projection", "arc"),
+         ("classifier_cut", "arc"), ("projection", "tri"), ("plain", "tri"),
+         ("bnneck", "tri"), ("projection", "circle")],
+    )
+    def test_supported_pairs_pass(self, head: str, loss: str) -> None:
+        check_head_loss_compatibility(head, loss)
 
 
 class TestMinerOverride:

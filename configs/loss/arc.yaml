@@ -1,3 +1,7 @@
 name: arc
-margin: 0.5
+# pytorch-metric-learning's ArcFaceLoss takes the angular margin in DEGREES
+# (it converts with np.radians). 28.6 deg = 0.5 rad, the ArcFace paper value.
+# Until 2026-09 this file said 0.5, which pml read as 0.5 deg (~0.0087 rad),
+# i.e. practically no margin (F2_ARC) - see git history.
+margin: 28.6
 scale: 30.0

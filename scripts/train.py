@@ -39,7 +39,7 @@ from soccernet_reid.data.catalog import (  # noqa: E402
     load_catalog,
 )
 from soccernet_reid.data.dataset import ReIDImageDataset  # noqa: E402
-from soccernet_reid.losses import build_loss  # noqa: E402
+from soccernet_reid.losses import build_loss, check_head_loss_compatibility  # noqa: E402
 from soccernet_reid.models import build_model  # noqa: E402
 from soccernet_reid.samplers import (  # noqa: E402
     PKBatchSampler,
@@ -142,6 +142,9 @@ def main(cfg: DictConfig) -> None:
     print("=" * 70)
     print(OmegaConf.to_yaml(cfg))
     print("=" * 70)
+
+    # Fail fast on head x loss pairs known not to train, before any data/model/W&B work.
+    check_head_loss_compatibility(cfg.head.name, cfg.loss.name)
 
     output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

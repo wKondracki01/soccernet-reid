@@ -2,4 +2,6 @@ name: ms
 alpha: 2.0
 beta: 50.0
 base: 1.0
-epsilon: 0.1
+# The Multi-Similarity miner (default for this loss) uses pml's default
+# epsilon = 0.1. An `epsilon` key used to live here but was never passed to the
+# miner; build_loss now rejects unknown keys, so it was removed (same value).

@@ -12,11 +12,19 @@ Public API
         xbm=False,             # wrap with Cross-Batch Memory (cross-batch negatives)
         xbm_memory_size=1024,  # XBM bank size; ignored if xbm=False
         miner_margin=0.3,      # used only by semi-hard TripletMarginMiner
-        **kwargs               # loss-specific hyperparams (margin, alpha, ...)
+        **kwargs               # loss-specific hyperparams (margin, alpha, ...);
+                               # names not listed in _LOSS_HPARAMS raise ValueError
     ) -> LossModule
+
+    check_head_loss_compatibility(head_name, loss_name)
+        # raises for head x loss pairs known not to train (CE on L2-normed output)
 
 Each LossModule has a callable that accepts (embeddings, labels) -> scalar loss
 and applies any miner / XBM internally.
+
+Units: TRI / CONT margins are Euclidean distances between L2-normalised
+embeddings (pml default LpDistance), CIRCLE / MS work on cosine similarity, and
+the ArcFace margin is in DEGREES (pml converts with np.radians): 28.6 = 0.5 rad.
 
 Loss × miner × XBM compatibility
 --------------------------------
@@ -57,6 +65,45 @@ _DEFAULT_MINER: dict[str, str] = {
     "ms": "multi-similarity",
     "circle": "batch-hard",
 }
+
+# Hyperparameters each loss understands. Anything else is rejected, so a typo in
+# a Hydra override (e.g. `margin` for circle, which uses `m`) fails loudly instead
+# of silently training with the default value.
+_LOSS_HPARAMS: dict[str, frozenset[str]] = {
+    "tri": frozenset({"margin"}),
+    "cont": frozenset({"pos_margin", "neg_margin"}),
+    "ms": frozenset({"alpha", "beta", "base"}),
+    "circle": frozenset({"m", "gamma"}),
+    "ce": frozenset({"label_smoothing"}),
+    "arc": frozenset({"margin", "scale"}),
+}
+
+# Heads whose output, as fed to classifier losses, is L2-normalised
+# (bnneck hands the classifier its normalised `embedding_retrieval`).
+_L2_NORMALISED_HEADS: frozenset[str] = frozenset({"projection", "bnneck"})
+
+# ArcFace margin in degrees, as pml expects: 28.6 deg = 0.5 rad (ArcFace paper).
+_ARC_DEFAULT_MARGIN_DEG = 28.6
+
+
+def check_head_loss_compatibility(head_name: str, loss_name: str) -> None:
+    """Fail fast on head x loss combinations known not to train.
+
+    CE uses a plain linear classifier without logit scaling. On L2-normalised
+    embeddings its logits stay tiny, softmax over ~139k classes is flat and the
+    loss sits at ln(C) for the whole run (F2_CE v1, 2026-05-17: 40 epochs at
+    11.84, mAP 0.36). Use head=classifier_cut or head=plain with CE.
+
+    ArcFace normalises embeddings and class weights and scales the logits
+    itself, so it trains with any head; metric losses normalise inside the
+    distance, so they do too.
+    """
+    if loss_name == "ce" and head_name in _L2_NORMALISED_HEADS:
+        raise ValueError(
+            f"loss=ce cannot be trained with head={head_name!r}: the classifier would see "
+            f"L2-normalised embeddings, logits stay tiny and the loss stays at ln(num_classes). "
+            f"Use head=classifier_cut or head=plain (or loss=arc, which scales the logits)."
+        )
 
 
 @dataclass
@@ -201,6 +248,12 @@ def build_loss(
     """Construct one of the six losses with optional miner and XBM. See module docstring."""
     if name not in _KNOWN_LOSSES:
         raise ValueError(f"Unknown loss {name!r}; supported: {sorted(_KNOWN_LOSSES)}")
+    unknown = set(kwargs) - _LOSS_HPARAMS[name]
+    if unknown:
+        raise ValueError(
+            f"Loss {name!r} does not accept hyperparameter(s) {sorted(unknown)}; "
+            f"accepted: {sorted(_LOSS_HPARAMS[name])}"
+        )
 
     # Classifier losses: no miner / xbm allowed
     if name in _CLASSIFIER_LOSSES:
@@ -222,10 +275,11 @@ def build_loss(
                 name=name, call=ce, requires_classes=True,
                 embedding_dim=embedding_dim, miner_name=None, xbm_enabled=False,
             )
-        # arc
+        # arc — pml takes the margin in degrees (see _ARC_DEFAULT_MARGIN_DEG)
         arc = pml_losses.ArcFaceLoss(
             num_classes=num_classes, embedding_size=embedding_dim,
-            margin=kwargs.get("margin", 0.5), scale=kwargs.get("scale", 30.0),
+            margin=kwargs.get("margin", _ARC_DEFAULT_MARGIN_DEG),
+            scale=kwargs.get("scale", 30.0),
         )
         return LossModule(
             name=name, call=_ArcAdapter(arc), requires_classes=True,
