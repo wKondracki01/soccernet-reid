@@ -2,7 +2,7 @@
 
 **Temat**: Re-identyfikacja zawodników piłki nożnej na podstawie wycinka obrazu (bounding box) z wykorzystaniem technik uczenia metryki odległości. Studium porównawcze różnych backbone'ów, funkcji straty, strategii samplowania i augmentacji.
 
-**Dataset**: SoccerNet Re-Identification 2023 (340 993 miniatur, 400 meczów, 6 lig). Lokalnie w `dataSoccerNet/reid-2023/`.
+**Dataset**: SoccerNet Re-Identification 2023 (340 993 miniatur z adnotacjami, 399 meczów, 6 lig). Lokalnie w `dataSoccerNet/reid-2023/`. Liczba meczów policzona na podziałach z adnotacjami: 290 (train) + 55 (valid) + 54 (test), bez wspólnych meczów między podziałami; oficjalny opis zbioru podaje 400.
 
 **Charakter pracy**: systematyczne studium porównawcze, **nie próba bicia SOTA** (leaderboard 2023 ≈ 91–93 mAP).
 
@@ -24,7 +24,7 @@
 
 **Klasy osób (zweryfikowane na rzeczywistych plikach, nie z dokumentacji)**: 7 klas — `Player_team_{left,right}`, `Goalkeeper_team_{left,right}`, `Main_referee`, `Side_referee`, `Staff_members`. Dokumentacja SoccerNet wspominała o klasach „unknown" (10 łącznie), ale w datasecie ich nie ma.
 
-**Rozkład próbek (zweryfikowany)**: train 248 234, valid 11 638 query + 34 355 gallery, test 11 777 query + 34 989 gallery, challenge 9 021 query + 26 082 gallery (anonimowy). Dystrybucja `(action, uid)` w train jest **skrajnie płaska**: 54.8% par to singletony (1 próbka), 33.5% ma 2 próbki, max to 8–10. Tylko 3% par ma ≥4 próbki. To dataset-specyficzny rozkład — kluczowy dla doboru P×K (patrz §3).
+**Rozkład próbek (zweryfikowany)**: train 248 234, valid 11 638 query + 34 355 gallery, test 11 777 query + 34 989 gallery, challenge 9 021 query + 26 082 gallery (anonimowy). Dystrybucja `(action, uid)` w train (po filtrze klas zawodniczych, 138 861 par) jest **skrajnie płaska**: 54.8% par to singletony (1 próbka), 33.5% ma 2 próbki, max to 9. Tylko 3.6% par ma ≥4 próbki (przed filtrem klas byłoby to 3.1%). To dataset-specyficzny rozkład — kluczowy dla doboru P×K (patrz §3).
 
 **Metryki raportowane**: mAP (główna), Rank-1, Rank-5, Rank-10 (krzywa CMC).
 
@@ -182,7 +182,7 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 3. **Filtr klas — tylko w treningu**: decyzja do udokumentowania w pracy — czy w treningu uwzględniamy `Staff`, `Side referee`, `Main referee` (osoby z innym strojem, inna semantyka). Domyślnie: trening tylko na klasach „zawodniczych" (`Player_team_*`, `Goalkeeper_*`), sędziowie i staff odrzuceni. **Ewaluacja NIE filtruje klas** — zawsze pełny zbiór query/gallery z oficjalnego podziału, inaczej wynik byłby nieporównywalny z leaderboardem. Konsekwencja: model w teście musi sensownie embedować również klasy, których nie widział w treningu (test out-of-distribution dla `Staff`/sędziów). To samo w sobie ciekawa rzecz do dyskusji w pracy. Wariant alternatywny (też trening na pełnym zbiorze) można dodać jako mini-ablację.
 4. **Singletony — bez explicit'nego filtra na katalogu**. Para `(action, uid)` z 1 próbką nie generuje pozytywnej pary, więc dla strat metric jest „bezużyteczna jako anchor". Ale **PK-style samplery (PK, PK-SA, SEMI, XBM) wybierają tylko klasy z ≥K próbek — singletony są naturalnie pomijane na poziomie batcha** bez ruszania katalogu. Dla strat klasyfikacyjnych (`CE`, `ArcFace`) singletony są w pełni użyteczne (każda osoba dostaje jeden gradient na FC; tak działa rozpoznawanie twarzy na MS-Celeb-1M / ArcFace). Wniosek: trzymamy pełen katalog (po filtrze klas), każdy sampler/strata używa go zgodnie ze swoją naturą. Liczby do raportu: 138 861 par `(action, uid)` po filtrze klas; z tego 76 147 (54.8%) singletonów (=trafia tylko do losowego samplera) i 62 714 par ≥2-próbkowych (=trafia też do PK-samplerów). To dataset-specyficzny rozkład udokumentowany w pracy (kontrast z Market-1501, gdzie ID mają 15–30 zdjęć).
 5. **Sampler `PKPerActionBatchSampler`**: w każdym batchu wybiera 1 akcję, z niej P tożsamości × K próbek (próg odcięcia: ID musi mieć ≥K próbek w tej akcji). Wariant `PK` wybiera ID cross-action z tym samym progiem.
-6. **Resize do 256×128** z paddingiem zachowującym aspekt (mini-ablacja: czy zachowanie aspektu pomaga).
+6. **Resize do 256×128 bez zachowania proporcji** — zwykłe skalowanie (`v2.Resize((256, 128))`), identyczne w treningu i ewaluacji; standardowa praktyka w ReID (BoT-ReID, torchreid, fast-reid). Zniekształcenie proporcji jest niepomijalne: mediana 25%, ok. 21% wycinków > 50%, ok. 6% > 100% (rozkład praktycznie identyczny w train i valid). Wariant z paddingiem zachowującym proporcje (letterbox) **nie jest zaimplementowany** — kandydat na mini-ablację. Kompromis: padding usuwa zniekształcenie, ale część i tak małej rozdzielczości (mediana wycinka 123×59 px) zajmują puste pasy.
 7. **Augmentacje** — moduł z 4 presetami przełączanymi z configu (Albumentations lub torchvision v2).
 
 ---
