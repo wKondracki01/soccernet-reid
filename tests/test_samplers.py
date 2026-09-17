@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from torch.utils.data import DataLoader, Dataset
 
 from soccernet_reid.samplers import PKBatchSampler, PKPerActionBatchSampler
 
@@ -13,6 +14,38 @@ def _make_class_ids(per_class_counts: dict[int, int]) -> list[int]:
     for cid, count in sorted(per_class_counts.items()):
         out.extend([cid] * count)
     return out
+
+
+def _make_actions(n_actions: int, n_classes: int, n_samples: int) -> tuple[list[int], list[int]]:
+    """class_ids / action_ids for n_actions × n_classes × n_samples (globally unique class ids)."""
+    class_ids, action_ids = [], []
+    for action in range(n_actions):
+        for cls in range(n_classes):
+            for _ in range(n_samples):
+                class_ids.append(action * 100 + cls)
+                action_ids.append(action)
+    return class_ids, action_ids
+
+
+class _IndexDataset(Dataset):
+    def __init__(self, n: int) -> None:
+        self.n = n
+
+    def __len__(self) -> int:
+        return self.n
+
+    def __getitem__(self, i: int) -> int:
+        return i
+
+
+def _epochs(sampler, n_epochs: int) -> list[list[list[int]]]:
+    return [[list(b) for b in sampler] for _ in range(n_epochs)]
+
+
+def _dataloader_epochs(sampler, n_items: int, n_epochs: int) -> list[list[list[int]]]:
+    """Iterate the sampler the way scripts/train.py does: DataLoader(batch_sampler=...)."""
+    loader = DataLoader(_IndexDataset(n_items), batch_sampler=sampler, num_workers=0)
+    return [[b.tolist() for b in loader] for _ in range(n_epochs)]
 
 
 class TestPKBatchSampler:
@@ -70,6 +103,28 @@ class TestPKBatchSampler:
         b1 = [list(b) for b in s1]
         b2 = [list(b) for b in s2]
         assert b1 != b2
+
+    def test_consecutive_epochs_differ(self) -> None:
+        # Regression: the generator used to be re-seeded in __iter__, so every
+        # epoch repeated exactly the same batches.
+        class_ids = _make_class_ids({i: 3 for i in range(20)})
+        sampler = PKBatchSampler(class_ids, P=4, K=2, num_batches=5, seed=0)
+        e1, e2, e3 = _epochs(sampler, 3)
+        assert e1 != e2
+        assert e2 != e3
+
+    def test_same_seed_replays_sequence_of_epochs(self) -> None:
+        class_ids = _make_class_ids({i: 3 for i in range(20)})
+        s1 = PKBatchSampler(class_ids, P=4, K=2, num_batches=5, seed=7)
+        s2 = PKBatchSampler(class_ids, P=4, K=2, num_batches=5, seed=7)
+        assert _epochs(s1, 3) == _epochs(s2, 3)
+
+    def test_dataloader_epochs_differ(self) -> None:
+        class_ids = _make_class_ids({i: 3 for i in range(20)})
+        sampler = PKBatchSampler(class_ids, P=4, K=2, num_batches=5, seed=0)
+        e1, e2 = _dataloader_epochs(sampler, len(class_ids), 2)
+        assert len(e1) == len(e2) == 5
+        assert e1 != e2
 
     def test_qualifying_classes_property(self) -> None:
         class_ids = _make_class_ids({0: 4, 1: 4, 2: 1, 3: 1})  # 2 singletons
@@ -186,6 +241,27 @@ class TestPKPerActionBatchSampler:
         s1 = PKPerActionBatchSampler(class_ids, action_ids, P=3, K=2, num_batches=5, seed=99)
         s2 = PKPerActionBatchSampler(class_ids, action_ids, P=3, K=2, num_batches=5, seed=99)
         assert [list(b) for b in s1] == [list(b) for b in s2]
+
+    def test_consecutive_epochs_differ(self) -> None:
+        # Regression: see TestPKBatchSampler.test_consecutive_epochs_differ.
+        class_ids, action_ids = _make_actions(n_actions=5, n_classes=5, n_samples=2)
+        sampler = PKPerActionBatchSampler(class_ids, action_ids, P=3, K=2, num_batches=5, seed=0)
+        e1, e2, e3 = _epochs(sampler, 3)
+        assert e1 != e2
+        assert e2 != e3
+
+    def test_same_seed_replays_sequence_of_epochs(self) -> None:
+        class_ids, action_ids = _make_actions(n_actions=5, n_classes=5, n_samples=2)
+        s1 = PKPerActionBatchSampler(class_ids, action_ids, P=3, K=2, num_batches=5, seed=7)
+        s2 = PKPerActionBatchSampler(class_ids, action_ids, P=3, K=2, num_batches=5, seed=7)
+        assert _epochs(s1, 3) == _epochs(s2, 3)
+
+    def test_dataloader_epochs_differ(self) -> None:
+        class_ids, action_ids = _make_actions(n_actions=5, n_classes=5, n_samples=2)
+        sampler = PKPerActionBatchSampler(class_ids, action_ids, P=3, K=2, num_batches=5, seed=0)
+        e1, e2 = _dataloader_epochs(sampler, len(class_ids), 2)
+        assert len(e1) == len(e2) == 5
+        assert e1 != e2
 
     def test_length_input_mismatch_raises(self) -> None:
         with pytest.raises(ValueError, match="length mismatch"):

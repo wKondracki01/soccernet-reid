@@ -20,6 +20,13 @@ Sampling is with replacement at the class level (each batch independently picks
 P classes from the qualifying pool). Within a chosen class, K samples are drawn
 without replacement if K ≤ class size, which is guaranteed by the qualification
 filter. The default `num_batches` defines an "epoch" as 5000 iterations (§5).
+
+Randomness: each sampler owns ONE NumPy generator, created from `seed` in
+`__init__` and advanced by every `__iter__` call. DataLoader calls `iter()` once
+per epoch, so consecutive epochs get different batches, while a fresh sampler
+with the same seed replays the same sequence of epochs. (Until 2026-09-17 the
+generator was re-created inside `__iter__`, so every epoch repeated the same
+batches; all training runs of May 2026 used that version — see git history.)
 """
 from __future__ import annotations
 
@@ -91,6 +98,9 @@ class PKBatchSampler(Sampler[list[int]]):
                 f"but P={P} requested. Lower K, lower P, or use a different sampler."
             )
 
+        # Created once: every epoch continues the same stream (see module docstring).
+        self._rng = np.random.default_rng(seed)
+
     @property
     def qualifying_classes(self) -> list[int]:
         """Class IDs eligible for sampling (length >= P guaranteed)."""
@@ -100,7 +110,7 @@ class PKBatchSampler(Sampler[list[int]]):
         return self.num_batches
 
     def __iter__(self) -> Iterator[list[int]]:
-        rng = np.random.default_rng(self.seed)
+        rng = self._rng
         qual = np.asarray(self._qualifying_classes, dtype=np.int64)
         for _ in range(self.num_batches):
             chosen_classes = rng.choice(qual, size=self.P, replace=False)
@@ -201,6 +211,9 @@ class PKPerActionBatchSampler(Sampler[list[int]]):
                 f"Try lower P (e.g. 4) or K=2."
             )
 
+        # Created once: every epoch continues the same stream (see module docstring).
+        self._rng = np.random.default_rng(seed)
+
     @property
     def qualifying_actions(self) -> list[int]:
         return list(self._qualifying_actions)
@@ -209,7 +222,7 @@ class PKPerActionBatchSampler(Sampler[list[int]]):
         return self.num_batches
 
     def __iter__(self) -> Iterator[list[int]]:
-        rng = np.random.default_rng(self.seed)
+        rng = self._rng
         actions_arr = np.asarray(self._qualifying_actions, dtype=np.int64)
         for _ in range(self.num_batches):
             aid = int(rng.choice(actions_arr))
