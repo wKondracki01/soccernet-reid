@@ -40,6 +40,7 @@ from pathlib import Path
 # access violation and no traceback (reading the catalog parquet exited with code 1).
 # Import it before torch.
 import pyarrow.dataset  # noqa: F401
+import numpy as np
 import torch
 
 # Allow running without `uv run -m ...`
@@ -47,7 +48,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from soccernet_reid.data.catalog import build_catalog, load_catalog  # noqa: E402
 from soccernet_reid.models import build_model  # noqa: E402
-from soccernet_reid.training import evaluate_model, pick_device  # noqa: E402
+from soccernet_reid.training import (  # noqa: E402
+    evaluate_model,
+    extract_split_embeddings,
+    metrics_from_embeddings,
+    pick_device,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -141,6 +147,9 @@ def main() -> int:
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--out", type=Path, default=None,
                         help="Optional: dump metrics as JSON to this path")
+    parser.add_argument("--save-embeddings", type=Path, default=None,
+                        help="Optional: also save the query/gallery embeddings of this split "
+                             "to an .npz file (input for scripts/eval_rerank.py)")
     args = parser.parse_args()
 
     # 1. Catalog
@@ -166,16 +175,41 @@ def main() -> int:
 
     # 4. Evaluate
     print(f"\nEvaluating on {args.split} (distance={args.distance}) ...")
-    metrics = evaluate_model(
-        model=model,
-        catalog=catalog,
-        split=args.split,
-        device=device,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        distance=args.distance,
-        ranks=tuple(args.ranks),
-    )
+    if args.save_embeddings is None:
+        metrics = evaluate_model(
+            model=model,
+            catalog=catalog,
+            split=args.split,
+            device=device,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            distance=args.distance,
+            ranks=tuple(args.ranks),
+        )
+    else:
+        # Same two steps evaluate_model performs, with the embeddings kept on disk.
+        embeddings = extract_split_embeddings(
+            model=model,
+            catalog=catalog,
+            split=args.split,
+            device=device,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+        )
+        args.save_embeddings.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            args.save_embeddings,
+            **embeddings,
+            split=np.array(args.split),
+            checkpoint=np.array(str(ckpt_path)),
+            epoch=np.array(int(ckpt.get("epoch", -1))),
+            best_mAP=np.array(float(ckpt.get("best_mAP", float("nan")))),
+        )
+        print(f"Saved embeddings -> {args.save_embeddings} "
+              f"(query {embeddings['query_feats'].shape}, gallery {embeddings['gallery_feats'].shape})")
+        metrics = metrics_from_embeddings(
+            embeddings, catalog, split=args.split, distance=args.distance, ranks=tuple(args.ranks)
+        )
 
     # 5. Report
     print("\n=== Results ===")

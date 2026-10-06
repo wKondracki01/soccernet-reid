@@ -141,6 +141,60 @@ def _extract_split_features(
     return np.concatenate(feats, axis=0)
 
 
+def _query_gallery_frames(
+    catalog: pd.DataFrame, split: str
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Rows of ``split`` plus its query and gallery frames, as every evaluation uses them.
+
+    Queries whose identity has no crop in the gallery of the same action are
+    dropped (the official evaluator raises on them). On the official valid and
+    test splits this removes nothing.
+    """
+    sub = catalog[catalog["split"] == split]
+    if sub.empty:
+        raise ValueError(f"No rows in catalog for split={split!r}")
+    query_df = sub[sub["role"] == "query"].reset_index(drop=True)
+    gallery_df = sub[sub["role"] == "gallery"].reset_index(drop=True)
+
+    gallery_pairs = set(
+        map(tuple, gallery_df[["action_idx", "person_uid"]].itertuples(index=False, name=None))
+    )
+    keep = query_df.apply(
+        lambda r: (int(r["action_idx"]), int(r["person_uid"])) in gallery_pairs, axis=1
+    )
+    query_df = query_df[keep].reset_index(drop=True)
+    return sub, query_df, gallery_df
+
+
+def extract_split_embeddings(
+    *,
+    model: ReIDModel,
+    catalog: pd.DataFrame,
+    split: str = "valid",
+    device: torch.device,
+    batch_size: int = 64,
+    num_workers: int = 4,
+) -> dict[str, np.ndarray]:
+    """Retrieval embeddings of a split's queries and gallery, with their identifiers.
+
+    Exactly the features and the query / gallery selection that
+    :func:`evaluate_model` ranks, so metrics computed later from the returned
+    arrays reproduce its result. Meant for post-processing that needs the
+    embeddings themselves (re-ranking, visualisation) without re-running the
+    network for every variant.
+    """
+    model.eval()
+    _, query_df, gallery_df = _query_gallery_frames(catalog, split)
+    return {
+        "query_feats": _extract_split_features(query_df, model, device, batch_size, num_workers),
+        "gallery_feats": _extract_split_features(gallery_df, model, device, batch_size, num_workers),
+        "query_bbox_idx": query_df["bbox_idx"].to_numpy(dtype=np.int64),
+        "gallery_bbox_idx": gallery_df["bbox_idx"].to_numpy(dtype=np.int64),
+        "query_action_idx": query_df["action_idx"].to_numpy(dtype=np.int64),
+        "gallery_action_idx": gallery_df["action_idx"].to_numpy(dtype=np.int64),
+    }
+
+
 def evaluate_model(
     *,
     model: ReIDModel,
@@ -157,41 +211,56 @@ def evaluate_model(
     Filters out queries whose person_uid is not represented in gallery of the
     same action (the official evaluator's precondition).
     """
-    model.eval()
-    sub = catalog[catalog["split"] == split]
-    if sub.empty:
-        raise ValueError(f"No rows in catalog for split={split!r}")
-    query_df = sub[sub["role"] == "query"].reset_index(drop=True)
-    gallery_df = sub[sub["role"] == "gallery"].reset_index(drop=True)
-
-    # Drop queries with no positives in gallery (official eval would crash)
-    gallery_pairs = set(
-        map(tuple, gallery_df[["action_idx", "person_uid"]].itertuples(index=False, name=None))
+    embeddings = extract_split_embeddings(
+        model=model,
+        catalog=catalog,
+        split=split,
+        device=device,
+        batch_size=batch_size,
+        num_workers=num_workers,
     )
-    keep = query_df.apply(
-        lambda r: (int(r["action_idx"]), int(r["person_uid"])) in gallery_pairs, axis=1
-    )
-    query_df = query_df[keep].reset_index(drop=True)
+    return metrics_from_embeddings(embeddings, catalog, split=split, distance=distance, ranks=ranks)
 
-    qf = _extract_split_features(query_df, model, device, batch_size, num_workers)
-    gf = _extract_split_features(gallery_df, model, device, batch_size, num_workers)
 
-    rankings = compute_rankings(
-        query_feats=qf,
-        gallery_feats=gf,
-        query_bbox_idx=query_df["bbox_idx"].astype(int).tolist(),
-        gallery_bbox_idx=gallery_df["bbox_idx"].astype(int).tolist(),
-        query_actions=query_df["action_idx"].astype(int).tolist(),
-        gallery_actions=gallery_df["action_idx"].astype(int).tolist(),
-        distance=distance,
-    )
+def split_groundtruth(
+    catalog: pd.DataFrame, split: str
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Ground truth of ``split`` in the official ``bbox_info.json`` layout.
 
-    # Build the in-memory groundtruth for our evaluator (matches official JSON shape)
+    Restricted to the queries and gallery crops that :func:`evaluate_model`
+    ranks, so it pairs with rankings built from :func:`extract_split_embeddings`.
+    """
+    sub, query_df, gallery_df = _query_gallery_frames(catalog, split)
     keep_bbox = set(query_df["bbox_idx"].astype(int)) | set(gallery_df["bbox_idx"].astype(int))
     subset = sub[sub["bbox_idx"].isin(keep_bbox)]
     gt = catalog_to_groundtruth_dict(subset, split=split)
     gt["query"] = {k: v for k, v in gt["query"].items() if int(k) in keep_bbox}
+    return gt
 
+
+def metrics_from_embeddings(
+    embeddings: Mapping[str, np.ndarray],
+    catalog: pd.DataFrame,
+    *,
+    split: str = "valid",
+    distance: str = "cosine",
+    ranks: tuple[int, ...] = (1, 5, 10),
+) -> dict[str, float]:
+    """mAP / Rank-k of the plain ranking for arrays from :func:`extract_split_embeddings`.
+
+    This is the second half of :func:`evaluate_model`; cached embeddings scored
+    here give the same numbers as an evaluation during training.
+    """
+    rankings = compute_rankings(
+        query_feats=embeddings["query_feats"],
+        gallery_feats=embeddings["gallery_feats"],
+        query_bbox_idx=[int(b) for b in embeddings["query_bbox_idx"]],
+        gallery_bbox_idx=[int(b) for b in embeddings["gallery_bbox_idx"]],
+        query_actions=[int(a) for a in embeddings["query_action_idx"]],
+        gallery_actions=[int(a) for a in embeddings["gallery_action_idx"]],
+        distance=distance,
+    )
+    gt = split_groundtruth(catalog, split)
     return compute_metrics(rankings, gt["query"], gt["gallery"], ranks=ranks)
 
 

@@ -27,8 +27,22 @@ def _top_level_imports(path: Path) -> list[str]:
     return names
 
 
+# Imports that load torch: torch itself and the project packages built on it.
+_TORCH_LOADING = (
+    "torch",
+    "torchvision",
+    "timm",
+    "soccernet_reid.training",
+    "soccernet_reid.models",
+    "soccernet_reid.losses",
+    "soccernet_reid.samplers",
+    "soccernet_reid.transforms",
+    "soccernet_reid.data.dataset",
+)
+
+
 def _is_torch(name: str) -> bool:
-    return name == "torch" or name.startswith("torch.")
+    return any(name == root or name.startswith(root + ".") for root in _TORCH_LOADING)
 
 
 TORCH_SCRIPTS = sorted(
@@ -38,7 +52,7 @@ TORCH_SCRIPTS = sorted(
 
 def test_known_torch_entrypoints_are_checked() -> None:
     names = {p.name for p in TORCH_SCRIPTS}
-    assert {"train.py", "eval_checkpoint.py", "smoke_eval.py"} <= names
+    assert {"train.py", "eval_checkpoint.py", "smoke_eval.py", "eval_rerank.py"} <= names
 
 
 @pytest.mark.parametrize("script", TORCH_SCRIPTS, ids=lambda p: p.name)
