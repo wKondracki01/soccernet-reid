@@ -122,6 +122,68 @@ def test_loss_decreases_over_two_epochs(tiny_dataset) -> None:
     )
 
 
+def _run_epoch(tiny_dataset, **kwargs) -> tuple[dict[str, float], torch.nn.Module]:
+    seed_everything(0)
+    enable_determinism(deterministic=False)
+    device = torch.device("cpu")
+    model = build_model("R18", "projection", embedding_dim=64, pretrained=False).to(device)
+    loss_module = build_loss("tri", embedding_dim=64, margin=0.3)
+    loader = _make_loader(tiny_dataset, P=4, K=2, num_batches=6)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-4)
+    metrics = train_one_epoch(
+        model=model, loss_module=loss_module, loader=loader, optimizer=optimizer,
+        scheduler=None, device=device, log_every=100, epoch=0, **kwargs,
+    )
+    return metrics, model
+
+
+def test_diagnostics_are_reported_on_schedule(tiny_dataset) -> None:
+    calls: list[tuple[str, int]] = []
+    seen: dict[int, dict[str, float]] = {}
+    losses: dict[int, float] = {}
+
+    def on_diagnostics(step: int, stats: dict[str, float]) -> None:
+        calls.append(("diag", step))
+        seen[step] = stats
+
+    def on_step(step: int, loss: float, lr: float) -> None:
+        calls.append(("step", step))
+        losses[step] = loss
+
+    _run_epoch(tiny_dataset, diagnostics_every=2, on_diagnostics=on_diagnostics, on_step=on_step)
+    # every 2nd of 6 steps, and before on_step of that same step
+    assert [s for kind, s in calls if kind == "diag"] == [1, 3, 5]
+    for step in (1, 3, 5):
+        assert calls.index(("diag", step)) < calls.index(("step", step))
+    for step, stats in seen.items():
+        assert {"alive_weight_frac", "alive_bn_channel_frac", "weight_norm", "alive_feature_dims",
+                "alive_embedding_dims", "pairwise_dist_mean", "d_ap_mean", "d_an_hardest_mean",
+                "hard_frac", "grad_norm"} <= set(stats)
+        assert all(np.isfinite(v) for v in stats.values())
+        assert stats["alive_embedding_dims"] == 64
+        # the gradient is that of the loss alone: it vanishes exactly when no triplet is active
+        assert (stats["grad_norm"] > 0.0) == (losses[step] > 0.0)
+    assert any(stats["grad_norm"] > 0.0 for stats in seen.values())
+
+
+def test_diagnostics_off_by_default(tiny_dataset) -> None:
+    called: list[int] = []
+    _run_epoch(tiny_dataset, on_diagnostics=lambda step, stats: called.append(step))
+    assert called == []
+
+
+def test_diagnostics_do_not_change_training(tiny_dataset) -> None:
+    plain_metrics, plain_model = _run_epoch(tiny_dataset)
+    diag_metrics, diag_model = _run_epoch(
+        tiny_dataset, diagnostics_every=1, on_diagnostics=lambda step, stats: None
+    )
+    assert diag_metrics["train_loss_mean"] == plain_metrics["train_loss_mean"]
+    for (name, a), (_, b) in zip(
+        plain_model.state_dict().items(), diag_model.state_dict().items(), strict=True
+    ):
+        assert torch.equal(a, b), name
+
+
 def test_train_one_epoch_with_classifier_loss(tiny_dataset) -> None:
     """CE loss path: requires_classes=True, embeds via classifier-cut head."""
     seed_everything(0)

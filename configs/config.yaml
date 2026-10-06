@@ -28,6 +28,12 @@ reid_root: dataSoccerNet/reid-2023
 num_epochs: 60
 num_iters_per_epoch: 5000
 log_every: 50
+# Run only the first N epochs and stop; the LR schedule still spans num_epochs.
+# For diagnostics of the early phase of a long schedule. null = run all epochs.
+stop_after_epochs: null
+# Every N training steps log the share of non-zero weights, the spread of the
+# batch embeddings and the loss-gradient norm (see training/health.py). 0 = off.
+diagnostics_every: 250
 
 # Optim
 optimizer:

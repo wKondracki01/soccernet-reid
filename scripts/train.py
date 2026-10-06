@@ -54,6 +54,7 @@ from soccernet_reid.training import (  # noqa: E402
     pick_device,
     seed_everything,
     train_one_epoch,
+    weight_health,
 )
 from soccernet_reid.training.loop import cosine_lr_with_warmup  # noqa: E402
 from soccernet_reid.training.state import amp_supported  # noqa: E402
@@ -216,13 +217,29 @@ def main(cfg: DictConfig) -> None:
     # 6. W&B
     wandb_run = _wandb_init(cfg, output_dir)
 
+    # Diagnostics of a step arrive just before on_step of the same step and go
+    # into the same W&B row, so the W&B step axis stays one row per training step.
+    pending_health: dict[str, float] = {}
+
+    def on_diagnostics(step: int, stats: dict[str, float]) -> None:
+        pending_health.update({f"health/{k}": v for k, v in stats.items()})
+
     def on_step(step: int, loss: float, lr: float) -> None:
         if wandb_run is not None:
-            wandb_run.log({"train/loss_step": loss, "train/lr": lr})
+            wandb_run.log({"train/loss_step": loss, "train/lr": lr, **pending_health})
+        pending_health.clear()
 
     # 7. Train + eval loop
+    stop_after = cfg.get("stop_after_epochs")
+    if stop_after is not None and int(stop_after) < 1:
+        raise ValueError(f"stop_after_epochs must be >= 1 or null, got {stop_after!r}")
+    last_epoch = cfg.num_epochs if stop_after is None else min(int(stop_after), cfg.num_epochs)
+    if last_epoch < cfg.num_epochs:
+        print(f"Stopping after epoch {last_epoch} of {cfg.num_epochs} "
+              f"(the LR schedule still spans {cfg.num_epochs} epochs)")
+
     best_map = -1.0
-    for epoch in range(cfg.num_epochs):
+    for epoch in range(last_epoch):
         t0 = time.perf_counter()
         train_metrics = train_one_epoch(
             model=model,
@@ -235,6 +252,8 @@ def main(cfg: DictConfig) -> None:
             log_every=cfg.log_every,
             epoch=epoch,
             on_step=on_step,
+            diagnostics_every=int(cfg.get("diagnostics_every", 0) or 0),
+            on_diagnostics=on_diagnostics,
         )
         dt = time.perf_counter() - t0
         print(f"Epoch {epoch}: train_loss={train_metrics['train_loss_mean']:.4f} "
@@ -246,8 +265,21 @@ def main(cfg: DictConfig) -> None:
             "epoch": epoch,
         }
 
+        # Share of the network still in use (see training/health.py)
+        health = weight_health(model)
+        dims = "".join(
+            f" | {label} {int(health[key])}"
+            for key, label in (("alive_feature_dims", "feature dims"),
+                               ("alive_embedding_dims", "embedding dims"))
+            if key in health
+        )
+        print(f"  Health: non-zero weights {100 * health['alive_weight_frac']:.2f}% | "
+              f"BN channels {100 * health['alive_bn_channel_frac']:.2f}%{dims}")
+        for k, v in health.items():
+            epoch_log[f"health/{k}"] = v
+
         # Eval cadence
-        if (epoch + 1) % cfg.eval.every_n_epochs == 0 or (epoch + 1) == cfg.num_epochs:
+        if (epoch + 1) % cfg.eval.every_n_epochs == 0 or (epoch + 1) == last_epoch:
             print(f"  Evaluating on {cfg.eval.split} ...")
             t0 = time.perf_counter()
             eval_metrics = evaluate_model(

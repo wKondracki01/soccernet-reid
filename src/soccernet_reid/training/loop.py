@@ -19,6 +19,7 @@ from soccernet_reid.eval.official import catalog_to_groundtruth_dict
 from soccernet_reid.eval.ranking import compute_rankings
 from soccernet_reid.losses.factory import LossModule
 from soccernet_reid.models.model import ReIDModel
+from soccernet_reid.training.health import batch_embedding_stats, gradient_norm, weight_health
 from soccernet_reid.transforms import build_transform
 
 
@@ -46,6 +47,21 @@ def _embedding_for_retrieval(out: torch.Tensor | dict[str, torch.Tensor]) -> tor
     return out
 
 
+def _report_diagnostics(
+    on_diagnostics: Any,
+    step: int,
+    model: ReIDModel,
+    emb: torch.Tensor,
+    labels: torch.Tensor,
+    grad_scale: float,
+) -> None:
+    """Collect the diagnostics of one step: weights, batch embeddings, loss gradient."""
+    stats = weight_health(model)
+    stats.update(batch_embedding_stats(emb, labels))
+    stats["grad_norm"] = gradient_norm(model.parameters(), scale=grad_scale)
+    on_diagnostics(step, stats)
+
+
 def train_one_epoch(
     *,
     model: ReIDModel,
@@ -58,6 +74,8 @@ def train_one_epoch(
     log_every: int = 50,
     epoch: int = 0,
     on_step: Any | None = None,
+    diagnostics_every: int = 0,
+    on_diagnostics: Any | None = None,
 ) -> dict[str, float]:
     """Run one training epoch over `loader`.
 
@@ -65,6 +83,13 @@ def train_one_epoch(
     The optional `on_step` callable (signature: (step_idx, loss_value, lr)) is
     invoked once per gradient step — useful for W&B logging without coupling
     the loop to W&B itself.
+
+    With `diagnostics_every` > 0, `on_diagnostics(step_idx, stats)` is called on
+    every `diagnostics_every`-th step, after `backward()` and before the
+    optimizer step, i.e. before `on_step` of the same step. `stats` holds the
+    values from :mod:`soccernet_reid.training.health` (share of non-zero
+    weights, spread of the batch embeddings, norm of the loss gradient). It
+    only reads the model, so training is the same with and without it.
     """
     model.train()
     losses: list[float] = []
@@ -76,6 +101,11 @@ def train_one_epoch(
         labels = batch["class_id"].to(device, non_blocking=True)
 
         optimizer.zero_grad(set_to_none=True)
+        diagnose = (
+            on_diagnostics is not None
+            and diagnostics_every > 0
+            and (step + 1) % diagnostics_every == 0
+        )
 
         if use_amp:
             with torch.amp.autocast(device_type=device.type):
@@ -86,6 +116,8 @@ def train_one_epoch(
                     emb = _embedding_for_metric_loss(out)
                 loss = loss_module.call(emb, labels)
             scaler.scale(loss).backward()
+            if diagnose:
+                _report_diagnostics(on_diagnostics, step, model, emb, labels, scaler.get_scale())
             scaler.step(optimizer)
             scaler.update()
         else:
@@ -96,6 +128,8 @@ def train_one_epoch(
                 emb = _embedding_for_metric_loss(out)
             loss = loss_module.call(emb, labels)
             loss.backward()
+            if diagnose:
+                _report_diagnostics(on_diagnostics, step, model, emb, labels, 1.0)
             optimizer.step()
 
         if scheduler is not None:
