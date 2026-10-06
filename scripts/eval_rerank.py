@@ -49,8 +49,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from soccernet_reid.data.catalog import load_catalog  # noqa: E402
 from soccernet_reid.eval.metrics import compute_metrics  # noqa: E402
 from soccernet_reid.eval.rerank import (  # noqa: E402
+    combined_scores,
     dual_softmax_scores,
-    dual_softmax_shares,
     group_positions_by_action,
     k_reciprocal_components,
     rankings_from_action_scores,
@@ -60,11 +60,13 @@ from soccernet_reid.training import metrics_from_embeddings, split_groundtruth  
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Search space. An action holds ~24 crops and most queries have one positive,
-# so k1 / k2 stay far below the paper's 20 / 6.
+# so k1 stays far below the paper's 20. lambda = 1 is the plain ranking, hence
+# the extra point at 0.95; temperatures below ~0.005 are already the
+# hard-assignment limit of the dual softmax.
 K1_GRID = (1, 2, 3, 4, 5, 6, 8, 10)
-K2_GRID = (1, 2, 3)
-LAMBDA_GRID = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
-TEMPERATURE_GRID = (0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0)
+K2_GRID = (1, 2, 3, 4, 5, 6)
+LAMBDA_GRID = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95)
+TEMPERATURE_GRID = (0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0)
 RANKS = (1, 5, 10)
 METRIC_KEYS = ("mAP", "rank-1", "rank-5", "rank-10")
 
@@ -119,7 +121,7 @@ class Actions:
         if method == "both":
             t = params["temperature"]
             return {
-                a: (1 - ((1 - lam) * j + lam * o)) * dual_softmax_shares(self.similarity[a], t)
+                a: combined_scores((1 - lam) * j + lam * o, self.similarity[a], t)
                 for a, (j, o) in comps.items()
             }
         raise ValueError(f"Unknown method {method!r}")
@@ -189,12 +191,18 @@ def tune(args: argparse.Namespace) -> int:
     ]
     best_ds = _best(ds_rows, ("temperature",))
 
+    # Joint search: the best k1 / k2 / lambda of k-reciprocal alone need not be
+    # the best ones once the shares are applied.
     both_rows: list[dict] = []
-    for lam in args.lambdas:
-        for t in args.temperatures:
-            p = {"k1": best_kr["k1"], "k2": best_kr["k2"], "lambda_value": lam, "temperature": t}
-            both_rows.append({**p, **actions.metrics("both", p, gt, validate=not both_rows)})
-    best_both = _best(both_rows, ("lambda_value", "temperature"))
+    for k1 in args.k1:
+        for k2 in args.k2:
+            for lam in args.lambdas:
+                for t in args.temperatures:
+                    p = {"k1": k1, "k2": k2, "lambda_value": lam, "temperature": t}
+                    both_rows.append({**p, **actions.metrics("both", p, gt, validate=not both_rows)})
+        print(f"both grid: k1={k1} done, {len(both_rows)} settings, "
+              f"{time.perf_counter() - t0:.0f}s elapsed", flush=True)
+    best_both = _best(both_rows, ("k1", "k2", "lambda_value", "temperature"))
     print(f"all grids done in {time.perf_counter() - t0:.0f}s")
 
     def pack(row: dict, keys: tuple[str, ...]) -> dict:
@@ -221,6 +229,7 @@ def tune(args: argparse.Namespace) -> int:
         "n_gallery": int(len(emb["gallery_bbox_idx"])),
         "n_actions": len(actions.ids),
         "baseline": baseline,
+        "selection": "highest mAP on valid; ties go to the smaller parameter values",
         "best": best,
         "grid": {"k_reciprocal": kr_rows, "dual_softmax": ds_rows, "both": both_rows},
         "search_space": {"k1": list(args.k1), "k2": list(args.k2),

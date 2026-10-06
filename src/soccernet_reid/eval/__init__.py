@@ -13,7 +13,9 @@ from soccernet_reid.eval.official import (
     run_official_evaluator,
 )
 from soccernet_reid.eval.rerank import (
+    combined_scores,
     compute_reranked_rankings,
+    dual_softmax_log_shares,
     dual_softmax_scores,
     dual_softmax_shares,
     k_reciprocal_components,
@@ -24,9 +26,11 @@ from soccernet_reid.eval.rerank import (
 __all__ = [
     "AP_TIES_TOLERANCE",
     "catalog_to_groundtruth_dict",
+    "combined_scores",
     "compute_metrics",
     "compute_rankings",
     "compute_reranked_rankings",
+    "dual_softmax_log_shares",
     "dual_softmax_scores",
     "dual_softmax_shares",
     "evaluate_embeddings",

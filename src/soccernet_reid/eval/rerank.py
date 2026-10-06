@@ -29,13 +29,18 @@ Two methods, usable separately or together:
     positive. For each gallery crop the similarities to all queries are turned
     into shares with a softmax (temperature ``T``), and the query's own
     similarity is multiplied by its share. With one query, or with a very large
-    temperature, the order is unchanged. This relies on a property of the
-    benchmark (distinct identities among the queries of an action) and must be
-    reported as such.
+    temperature, the order is unchanged; as ``T`` goes to 0 it becomes a hard
+    assignment (crops for which this query is the best match come first, the
+    rest follow by their gap to the best query). This relies on a property of
+    the benchmark (distinct identities among the queries of an action) and must
+    be reported as such.
 
 ``both``
     The k-reciprocal similarity ``1 - final`` multiplied by the dual-softmax
     shares.
+
+Scores that involve the shares are computed as logarithms of these products,
+which gives the same order without underflow at low temperatures.
 
 The plain cosine ranking stays in :mod:`soccernet_reid.eval.ranking`, which is
 kept bit-identical to the official evaluator; nothing here is used unless a
@@ -167,8 +172,13 @@ def k_reciprocal_distances(
     return (1.0 - lambda_value) * jaccard + lambda_value * original
 
 
-def dual_softmax_shares(similarity: np.ndarray, temperature: float) -> np.ndarray:
-    """Share of each query in each gallery crop: softmax over queries (axis 0)."""
+def _log_floored(x: np.ndarray) -> np.ndarray:
+    """``log(x)`` for ``x >= 0`` with zeros mapped to a very negative finite value."""
+    return np.log(np.maximum(x, np.finfo(np.float64).tiny))
+
+
+def dual_softmax_log_shares(similarity: np.ndarray, temperature: float) -> np.ndarray:
+    """Logarithm of each query's share in each gallery crop (log-softmax over axis 0)."""
     if not temperature > 0.0:
         raise ValueError(f"temperature must be > 0, got {temperature!r}")
     sim = np.asarray(similarity, dtype=np.float64)
@@ -178,14 +188,33 @@ def dual_softmax_shares(similarity: np.ndarray, temperature: float) -> np.ndarra
         return np.zeros_like(sim)
     logits = sim / temperature
     logits = logits - logits.max(axis=0, keepdims=True)
-    shares = np.exp(logits)
-    return shares / shares.sum(axis=0, keepdims=True)
+    # the best query contributes exp(0) = 1, so the sum is >= 1 and its log is safe
+    return logits - np.log(np.exp(logits).sum(axis=0, keepdims=True))
+
+
+def dual_softmax_shares(similarity: np.ndarray, temperature: float) -> np.ndarray:
+    """Share of each query in each gallery crop: softmax over queries (axis 0)."""
+    return np.exp(dual_softmax_log_shares(similarity, temperature))
 
 
 def dual_softmax_scores(similarity: np.ndarray, temperature: float) -> np.ndarray:
-    """Cosine similarity mapped to [0, 1], times the query's share (higher = better)."""
+    """Log of [cosine similarity mapped to [0, 1], times the query's share]; higher = better.
+
+    Kept in the log domain: at a low temperature the share of a query that
+    loses a crop by a wide margin underflows to exactly 0 as a plain product
+    (``exp(-gap / T)`` with ``gap / T > 708``), which would turn such crops
+    into ties ordered by their position in the gallery.
+    """
     sim = np.asarray(similarity, dtype=np.float64)
-    return (sim + 1.0) / 2.0 * dual_softmax_shares(sim, temperature)
+    return _log_floored((sim + 1.0) / 2.0) + dual_softmax_log_shares(sim, temperature)
+
+
+def combined_scores(
+    final_distance: np.ndarray, similarity: np.ndarray, temperature: float
+) -> np.ndarray:
+    """Scores of the ``both`` method: log of [(1 - k-reciprocal distance) times the share]."""
+    final = np.asarray(final_distance, dtype=np.float64)
+    return _log_floored(1.0 - final) + dual_softmax_log_shares(similarity, temperature)
 
 
 def rerank_action_scores(
@@ -208,7 +237,7 @@ def rerank_action_scores(
     final = k_reciprocal_distances(q, g, k1=k1, k2=k2, lambda_value=lambda_value)
     if method == "k_reciprocal":
         return -final
-    return (1.0 - final) * dual_softmax_shares(_similarity(q, g), temperature)
+    return combined_scores(final, _similarity(q, g), temperature)
 
 
 def group_positions_by_action(actions: Sequence[int]) -> dict[int, np.ndarray]:

@@ -6,7 +6,9 @@ import pytest
 
 from soccernet_reid.eval.ranking import compute_rankings
 from soccernet_reid.eval.rerank import (
+    combined_scores,
     compute_reranked_rankings,
+    dual_softmax_log_shares,
     dual_softmax_scores,
     dual_softmax_shares,
     k_reciprocal_components,
@@ -229,6 +231,54 @@ class TestDualSoftmax:
         sim = np.array([[0.9, 0.1], [0.2, 0.1], [0.3, 0.1]])
         shares = dual_softmax_shares(sim, temperature=0.05)
         np.testing.assert_allclose(shares[:, 1], np.full(3, 1 / 3))
+
+    def test_scores_are_the_log_of_similarity_times_share(self) -> None:
+        rng = np.random.default_rng(12)
+        sim = rng.uniform(-0.9, 1.0, size=(6, 11))
+        product = (sim + 1.0) / 2.0 * dual_softmax_shares(sim, temperature=0.07)
+        scores = dual_softmax_scores(sim, temperature=0.07)
+        np.testing.assert_allclose(np.exp(scores), product, rtol=1e-12)
+        for row in range(sim.shape[0]):  # hence the same order as the plain product
+            assert np.array_equal(
+                np.argsort(-scores[row], kind="stable"), np.argsort(-product[row], kind="stable")
+            )
+
+    def test_combined_scores_are_the_log_of_the_product(self) -> None:
+        rng = np.random.default_rng(13)
+        sim = rng.uniform(-0.9, 1.0, size=(4, 7))
+        final = rng.uniform(0.0, 0.99, size=(4, 7))
+        product = (1.0 - final) * dual_softmax_shares(sim, temperature=0.1)
+        np.testing.assert_allclose(np.exp(combined_scores(final, sim, 0.1)), product, rtol=1e-12)
+
+    def test_low_temperature_does_not_underflow_into_ties(self) -> None:
+        # Query B wins every crop by a wide margin. As a plain product A's shares
+        # are exp(-8000), exp(-6500), exp(-3000) = 0.0, i.e. three tied crops left
+        # in gallery order; in the log domain A still ranks them by the gap to B.
+        sim = np.array([[0.10, 0.30, 0.20],
+                        [0.90, 0.95, 0.50]])
+        assert (dual_softmax_shares(sim, temperature=1e-4)[0] == 0.0).all()
+        scores = dual_softmax_scores(sim, temperature=1e-4)
+        assert np.isfinite(scores).all()
+        assert list(np.argsort(-scores[0], kind="stable")) == [2, 1, 0]   # gaps 0.30 < 0.65 < 0.80
+        assert list(np.argsort(-scores[1], kind="stable")) == [1, 0, 2]   # B's own order by similarity
+        both = combined_scores(np.full((2, 3), 0.5), sim, temperature=1e-4)
+        assert np.isfinite(both).all()
+        assert list(np.argsort(-both[0], kind="stable")) == [2, 1, 0]
+
+    def test_log_shares_match_shares(self) -> None:
+        rng = np.random.default_rng(14)
+        sim = rng.uniform(-1, 1, size=(5, 9))
+        np.testing.assert_allclose(
+            np.exp(dual_softmax_log_shares(sim, 0.05)), dual_softmax_shares(sim, 0.05), rtol=1e-12
+        )
+
+    def test_zero_base_score_stays_finite(self) -> None:
+        # cosine -1 and a k-reciprocal distance of exactly 1 both give a base score of 0
+        sim = np.array([[-1.0, 0.5], [0.2, 0.1]])
+        assert np.isfinite(dual_softmax_scores(sim, temperature=0.1)).all()
+        scores = combined_scores(np.array([[1.0, 0.2], [0.3, 0.4]]), sim, temperature=0.1)
+        assert np.isfinite(scores).all()
+        assert np.argmin(scores[0]) == 0
 
 
 class TestEdgeCases:
