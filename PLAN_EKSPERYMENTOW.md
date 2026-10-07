@@ -151,8 +151,10 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 ### Faza 1 — oś C (sampler+miner)
 `R18 + TRI + AUG-MIN`, 40 epok, pakiet ∈ {`RAND, PK-BH, PK-SH, PK-BH-XBM, PK-SA-BH, PK-SA-SH, PK-SA-BH-XBM`}. **7 przebiegów.** → wybieramy `S*`.
 
+> **Wybór (7.10.2026): `S*` = PK-SA + BATCH-HARD, bez XBM.** Wariant z XBM dał wynik równorzędny (różnica mAP w granicach niepewności pomiaru na zbiorze walidacyjnym), więc dalej idzie prostszy z dwóch. XBM zostaje wynikiem osi 1 i możliwym dodatkiem do konfiguracji końcowej (oś 5).
+
 ### Faza 2 — oś B (strata)
-`R18 + S* + AUG-MIN`, 40 epok, strata ∈ {`CE, CONT, TRI, MS, CIRCLE, ARC`}. **6 wpisów** (TRI to zwycięzca osi 1; 5 nowych przebiegów). → wybieramy `L*`.
+`R18 + S* + AUG-MIN`, 40 epok, strata ∈ {`CE, CONT, TRI, MS, CIRCLE, ARC`}. **6 wpisów** (TRI to zwycięzca osi 1). Uruchomione 7.10.2026 jako **7 przebiegów**: `G2_CONT`, `G2_MS`, `G2_CIRCLE` oraz straty klasyfikacyjne w dwóch wersjach — bez weight decay (`G2_CE`, `G2_ARC`) i z weight decay 5·10⁻⁴ (`G2_CE_WD`, `G2_ARC_WD`). → wybieramy `L*`.
 
 > **Doprecyzowanie samplera/minera**: z pakietu `S*` przenosimy do Fazy 2 tylko **sampler**, **miner dobieramy do straty** zgodnie z literaturą:
 > - `CONT` → all-pairs (bez minera),
@@ -161,9 +163,13 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 > - `CIRCLE` → all-pairs (bez minera) — strata sama waży wszystkie pary; w serii F użyto BATCH-HARD (zob. §0),
 > - `CE`, `ARC` → **losowy sampler** niezależnie od `S*` (PK-SA daje w batchu klasy tylko z 1 akcji → softmax na dziesiątkach tysięcy klas degeneruje).
 >
-> XBM z pakietu `S*` dziedziczymy jeśli był i jeśli strata jest parowa — do potwierdzenia przy przeglądzie wyników osi 1.
+> XBM: wybrany pakiet `S*` go nie zawiera, więc straty parowe w tej fazie też go nie używają.
 >
-> `ARC`: jeden przebieg, z właściwym marginesem 0.5 rad (28.6°). W serii F margines wynosił przez błąd jednostek 0.5°.
+> **Weight decay dla strat klasyfikacyjnych**: przebieg odniesienia `G0b` (CE bez weight decay) zapamiętał zbiór treningowy — strata treningowa zbliżyła się do minimum, a mAP na zbiorze walidacyjnym spadało od pierwszej ewaluacji. Dlatego `CE` i `ARC` idą w dwóch wersjach (weight decay 0 i 5·10⁻⁴); która z nich jest wierszem głównym tabeli, ustalamy po wynikach. Straty metryczne pozostają bez weight decay.
+>
+> **Ewaluacja**: w czterech przebiegach klasyfikacyjnych co epokę (`eval.every_n_epochs=1`), bo najlepszy wynik może wypadać przed 5. epoką; checkpoint trafia wtedy do W&B raz, na końcu (`wandb.upload_best=end`).
+>
+> `ARC`: właściwy margines 0.5 rad (28.6°), bez wariantu z innym marginesem; w tabeli jeden wiersz. W serii F margines wynosił przez błąd jednostek 0.5°.
 >
 > **Doprecyzowanie głowy modelu**: Faza 2 używa domyślnej głowy `projection` (BN→FC→BN→L2-norm) dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`) i dla `ARC` (ArcFace ma wewnętrzny scale=30 który neutralizuje saturację logitów). Wyjątek dla `CE`: musi używać głowy **`classifier_cut`** (raw features, bez L2-norm), ponieważ L2-norma na 138k-class CE classifierze powoduje saturację — logity skalują się do ~[-0.06, 0.06], softmax wychodzi praktycznie uniform, gradient zerowy, train loss zatrzymuje się na `ln(138852)≈11.84`. Empirycznie zweryfikowane (F2_CE v1 z projection head: train_loss stale 11.84 przez 40 epok, mAP=0.363). Z `classifier_cut`: normalna konwergencja. Same head jak w Wariancie K (F0b) z §7.3, ale F2_CE używa 40 epok dla spójności tabeli Fazy 2.
 
