@@ -267,7 +267,20 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 
 ## 7. Ablacje uzupełniające (do dyskusji w pracy)
 
-> Stan: żadna z ablacji nie została uruchomiona i nie są one częścią serii G. Które wykonać, zdecydujemy po osi 5. Punkt 1 wymaga przeprojektowania przed uruchomieniem: biblioteka normalizuje embeddingi wewnątrz strat, a dla znormalizowanych wektorów ranking cosinusowy i euklidesowy są identyczne. Punkt 6 (re-ranking) jest już zaimplementowany i wchodzi do zakończenia serii G (§6.7).
+> **Stan względem serii G.** Na część pytań odpowiedzą dane zbierane w serii G; reszta wymaga osobnych treningów, o których zdecydujemy po osi 5.
+>
+> | # | Ablacja | Pokrycie przez serię G | Co wymagałoby osobnych przebiegów |
+> |---|---|---|---|
+> | 1 | Normalizacja L2 | brak | wszystko; punkt wymaga przeprojektowania (biblioteka normalizuje embeddingi wewnątrz strat, a dla znormalizowanych wektorów ranking cosinusowy i euklidesowy są identyczne) |
+> | 2 | Wymiar embeddingu | częściowe: z zapisanych embeddingów — efektywna liczba używanych wymiarów i mAP po obcięciu (PCA) do mniejszego wymiaru; to analiza przybliżona | trening z innym `D` |
+> | 3 | Klasyfikacja vs. metryka | częściowe: Wariant K vs. uczenie metryki na R18 (faza 0: `G0a` / `G0b`; faza 2: CE i ArcFace obok strat metrycznych) | Wariant K na konfiguracji końcowej; Wariant H (hybryda) — także zmiana kodu |
+> | 4 | Pretraining | brak (jest tylko punkt odniesienia `R18-ImageNet` bez treningu) | przebieg od zera |
+> | 5 | Pooling GAP vs. GeM | brak | zmiana kodu i przebieg |
+> | 6 | Re-ranking | pełne — wykonywany na końcu serii (§6.7) | — |
+> | 7 | Krzywa zbieżności | pełne — mAP co 5 epok w każdym przebiegu; `G0a` (60 epok) i `G1_PK_BH` (40 epok) to ta sama konfiguracja | — |
+> | 8 | K w samplerze | brak | 2 przebiegi |
+>
+> Poza listą: wpływ weight decay na stan sieci jest już zbadany parą przebiegów `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0` (§0).
 
 1. **L2-normalizacja embeddingu**: porównanie 3 wariantów głowy × 2 metryki dystansu = **6 konfiguracji** (na 1 najlepszym backbonie + stracie):
    - **Warianty głowy**: (a) `FC → BN → L2` [pełna], (b) `FC → BN` [bez L2], (c) `FC` [bez BN, bez L2].
