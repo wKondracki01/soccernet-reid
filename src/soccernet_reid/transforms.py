@@ -4,13 +4,18 @@ Presets:
     "eval"       — no augmentation, just resize + normalize. Used for valid/test.
     "aug-min"    — eval + horizontal flip. The weakest training transform.
     "aug-med"    — aug-min + ColorJitter + RandomCrop with padding + Random Erasing.
-    "aug-strong" — aug-med + RandAugment + GaussianBlur + RandomPerspective. RE at p=0.5
-                   (Zhong default). First version used p=0.7 + scale=(0.02, 0.4) and
-                   collapsed on SoccerNet narrow crops — see git history.
+    "aug-strong" — aug-med + RandAugment + GaussianBlur + RandomPerspective.
     "aug-bot"   — ReID-aware "strong": aug-med features + RandomGrayscale + stronger
-                   ColorJitter + RE p=0.5. No RandAugment/Perspective/Blur (those are
-                   ImageNet-classification-tuned and hurt instance discrimination).
-                   Recipe follows BoT-ReID (Luo 2019) / MGN (Wang 2018).
+                   ColorJitter. No RandAugment/Perspective/Blur. Recipe follows
+                   BoT-ReID (Luo 2019) / MGN (Wang 2018).
+
+Random Erasing is the same in all three (``RANDOM_ERASING``: p=0.5, 2-40% of the
+area, aspect ratio 0.3-3.3 — the defaults of Zhong et al. and of BoT-ReID), so
+the presets differ only in the operations listed above. Until October 2026
+aug-med erased 2-33% while the other two erased 2-40%.
+
+The collapse of the aug-strong / aug-bot runs of May 2026 was caused by the
+optimizer's weight decay, not by these transforms (see configs/config.yaml).
 
 MixUp / CutMix are deliberately omitted (see plan §2.D): they require label
 mixing which is incompatible with pair-based metric learning losses.
@@ -27,6 +32,9 @@ from torchvision.transforms import v2
 
 IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
+
+# One Random Erasing setting for every preset that uses it (see module docstring).
+RANDOM_ERASING: dict = {"p": 0.5, "scale": (0.02, 0.4), "ratio": (0.3, 3.3)}
 
 TransformLevel = Literal["eval", "aug-min", "aug-med", "aug-strong", "aug-bot"]
 _LEVELS: tuple[str, ...] = ("eval", "aug-min", "aug-med", "aug-strong", "aug-bot")
@@ -85,7 +93,7 @@ def build_transform(
                 v2.RandomCrop((height, width)),
                 *postamble,
                 # RandomErasing on float-normalised tensor (per v2 convention).
-                v2.RandomErasing(p=0.5),
+                v2.RandomErasing(**RANDOM_ERASING),
             ]
         )
 
@@ -102,18 +110,13 @@ def build_transform(
                 v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
                 v2.RandomPerspective(distortion_scale=0.2, p=0.3),
                 *postamble,
-                # RE p=0.5 (Zhong et al. default). First attempt used p=0.7 +
-                # scale=(0.02, 0.4) which on SoccerNet's narrow 256x128 crops
-                # contributed to a training collapse (mAP frozen at 0.28).
-                v2.RandomErasing(p=0.5, scale=(0.02, 0.4)),
+                v2.RandomErasing(**RANDOM_ERASING),
             ]
         )
 
     # level == "aug-bot"
-    # ReID-aware "strong": no RandAugment/Perspective/Blur (those are tuned for
-    # ImageNet classification and destroy instance-discriminative cues for ReID).
-    # Adds RandomGrayscale (BoT-ReID/MGN canonical), stronger ColorJitter,
-    # Random Erasing at the BoT-ReID / Zhong et al. default p=0.5.
+    # ReID-aware "strong": no RandAugment/Perspective/Blur. Adds RandomGrayscale
+    # (BoT-ReID/MGN canonical) and a stronger ColorJitter.
     return v2.Compose(
         [
             *preamble,
@@ -123,6 +126,6 @@ def build_transform(
             v2.Pad(pad),
             v2.RandomCrop((height, width)),
             *postamble,
-            v2.RandomErasing(p=0.5, scale=(0.02, 0.4), ratio=(0.3, 3.3)),
+            v2.RandomErasing(**RANDOM_ERASING),
         ]
     )

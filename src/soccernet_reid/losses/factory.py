@@ -32,9 +32,16 @@ Loss × miner × XBM compatibility
     tri      | batch-hard       | yes              | yes
     cont     | none (all-pairs) | yes              | yes
     ms       | multi-similarity | yes              | yes
-    circle   | batch-hard       | yes              | yes
+    circle   | none (all-pairs) | yes              | yes
     ce       | n/a              | rejected         | rejected
     arc      | n/a              | rejected         | rejected
+
+Circle loss (Sun et al., CVPR 2020) weights every positive and negative pair of
+an anchor by how far it is from its optimum, so it is defined on all pairs of
+the batch and needs no miner. Until October 2026 the default here was
+batch-hard: the loss then saw one positive and one negative per anchor, which
+removes exactly that weighting (the F2_CIRCLE / F5_CIRCLE_* runs of May 2026
+were trained that way). ``miner="batch-hard"`` still reproduces it.
 
 This map mirrors the §2.C "pakiet" definitions:
     RAND        = sampler=random + miner=none
@@ -63,7 +70,7 @@ _DEFAULT_MINER: dict[str, str] = {
     "tri": "batch-hard",
     "cont": "none",
     "ms": "multi-similarity",
-    "circle": "batch-hard",
+    "circle": "none",
 }
 
 # Hyperparameters each loss understands. Anything else is rejected, so a typo in

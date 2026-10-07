@@ -36,23 +36,32 @@ stop_after_epochs: null
 diagnostics_every: 250
 
 # Optim
+# weight_decay is 0 on purpose. torch.optim.Adam adds it to the gradient as an L2
+# term BEFORE the adaptive scaling, so for a loss with small gradients (triplet,
+# MS, contrastive) it pulls weights to zero at close to the full learning-rate
+# speed. With 5e-4 (the value of the May 2026 runs) 97-99% of the convolution
+# weights ended as numerical zeros and the AUG-STRONG / AUG-BOT runs collapsed;
+# the same AUG-BOT run with 0 reaches mAP 0.785 (DIAG_BOT_WD5E4 vs DIAG_BOT_WD0).
 optimizer:
   name: adam
   lr: 3.5e-4
-  weight_decay: 5.0e-4
+  weight_decay: 0.0
 scheduler:
   warmup_epochs: 5
   min_lr_ratio: 0.0
 
 # Backend
 device: auto         # auto / cuda / mps / cpu
-amp: true            # automatically disabled on non-CUDA devices
+# Full precision by default: in May 2026 mixed precision crashed or produced NaN
+# with EfficientNet-B2/B3/B4 and with EB1 + AUG-MED, so runs ended up split
+# between AMP and FP32. Set amp=true only for a deliberate speed test.
+amp: false           # mixed precision (CUDA only)
 num_workers: 4
 
 # Evaluation (during training and at end)
 eval:
   batch_size: 64
-  every_n_epochs: 10
+  every_n_epochs: 5    # 10 in the May 2026 runs; 5 gives denser learning curves
   ranks: [1, 5, 10]
   distance: cosine
   split: valid

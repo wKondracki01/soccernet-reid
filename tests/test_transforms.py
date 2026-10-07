@@ -28,7 +28,7 @@ def _random_pil(size: tuple[int, int] = (160, 80), seed: int = 0) -> Image.Image
 
 
 class TestShapeAndDtype:
-    @pytest.mark.parametrize("level", ["eval", "aug-min", "aug-med", "aug-strong"])
+    @pytest.mark.parametrize("level", ["eval", "aug-min", "aug-med", "aug-strong", "aug-bot"])
     def test_output_shape_is_3xHxW(self, level: str) -> None:
         tx = build_transform(level, height=256, width=128)
         img = _random_pil()
@@ -38,7 +38,7 @@ class TestShapeAndDtype:
         assert out.shape == (3, 256, 128), f"{level}: bad shape {out.shape}"
         assert out.dtype == torch.float32
 
-    @pytest.mark.parametrize("level", ["eval", "aug-min", "aug-med", "aug-strong"])
+    @pytest.mark.parametrize("level", ["eval", "aug-min", "aug-med", "aug-strong", "aug-bot"])
     def test_handles_small_input(self, level: str) -> None:
         # Some real bboxes are tiny (e.g. 30×15) — must still resize correctly
         tx = build_transform(level, height=256, width=128)
@@ -70,7 +70,24 @@ class TestDeterminism:
         any_different = any(not torch.equal(outs[0], o) for o in outs[1:])
         assert any_different, "aug-min should produce different outputs across seeds"
 
-    @pytest.mark.parametrize("level", ["aug-med", "aug-strong"])
+    def test_random_erasing_is_the_same_in_every_preset(self) -> None:
+        """aug-med / aug-strong / aug-bot must differ only in their other operations."""
+        from torchvision.transforms import v2
+
+        from soccernet_reid.transforms import RANDOM_ERASING
+
+        assert RANDOM_ERASING == {"p": 0.5, "scale": (0.02, 0.4), "ratio": (0.3, 3.3)}
+        for level in ("aug-med", "aug-strong", "aug-bot"):
+            steps = build_transform(level).transforms
+            erasers = [t for t in steps if isinstance(t, v2.RandomErasing)]
+            assert len(erasers) == 1, level
+            re = erasers[0]
+            assert (re.p, tuple(re.scale), tuple(re.ratio)) == (0.5, (0.02, 0.4), (0.3, 3.3)), level
+            assert steps[-1] is re      # applied last, after Normalize
+        for level in ("eval", "aug-min"):
+            assert not any(isinstance(t, v2.RandomErasing) for t in build_transform(level).transforms)
+
+    @pytest.mark.parametrize("level", ["aug-med", "aug-strong", "aug-bot"])
     def test_strong_augmentations_vary(self, level: str) -> None:
         tx = build_transform(level, height=256, width=128)
         img = _random_pil()

@@ -8,6 +8,24 @@
 
 ---
 
+## 0. Seria G (październik 2026) — zmiany względem serii F z maja 2026
+
+Wszystkie przebiegi z maja 2026 (nazwy `F0`–`F5`) zostały powtórzone jako seria `G0`–`G5` z następującymi zmianami. Reszta ustawień (lr, harmonogram, definicja epoki, ziarno, głowa modelu, warianty w osiach) jest bez zmian.
+
+| Zmiana | Seria F (maj) | Seria G | Powód |
+|---|---|---|---|
+| Weight decay | 5e-4 (L2 wbudowane w `torch.optim.Adam`) | 0 | L2 w Adamie jest dzielone przez skalę gradientu, więc przy stratach o małym gradiencie (triplet, MS, contrastive) ściągało wagi do zera: na końcu treningu 97–99% wag konwolucji było zerami, a przebiegi AUG-STRONG / AUG-BOT kończyły z zerowymi embeddingami. Ten sam przebieg AUG-BOT z wd=0 daje mAP 0,785 (`DIAG_BOT_WD5E4` vs `DIAG_BOT_WD0`). |
+| Sampler PK / PK-SA | te same 5000 batchy w każdej epoce (błąd) | nowe batche w każdej epoce | generator liczb losowych był tworzony od nowa co epokę |
+| Margines ArcFace | 0,5° (błąd jednostek) | 28,6° = 0,5 rad | biblioteka przyjmuje margines w stopniach |
+| Precyzja obliczeń | AMP w części przebiegów, FP32 w pozostałych | FP32 wszędzie | AMP powodował błędy CUDA i NaN z EfficientNet; mieszane ustawienia utrudniały porównania |
+| Strata Circle | z minerem batch-hard (1 pozytyw i 1 negatyw na kotwicę) | wszystkie pary w batchu, bez minera | tak zdefiniowano ją w pracy źródłowej (Sun i in., 2020); miner usuwał ważenie par, które jest istotą tej straty |
+| Random Erasing | AUG-MED: 2–33% pola; AUG-STRONG / AUG-BOT: 2–40% | 2–40% we wszystkich | zestawy mają się różnić tylko wymienionymi operacjami |
+| Ewaluacja na valid | co 10 epok | co 5 epok | gęstsze krzywe uczenia do wykresów |
+
+Wnioski serii F o collapse'ie AUG-STRONG / AUG-BOT (niżej w tym dokumencie) dotyczą starego optymalizatora i nie opisują własności augmentacji. Opisy poniżej zostają jako zapis stanu z maja 2026.
+
+---
+
 ## 1. Sformułowanie zadania i kluczowe ograniczenia datasetu
 
 **Zadanie retrievalowe**: dla zapytania (`query` bbox) zwrócić ranking obrazów `gallery` posortowany malejąco wg podobieństwa do tej samej osoby.
@@ -122,7 +140,7 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 > - `CONT` → all-pairs (bez minera),
 > - `TRI` → BATCH-HARD (z `S*`, jeśli ma) lub SEMI-HARD,
 > - `MS` → `MultiSimilarityMiner` (część definicji straty),
-> - `CIRCLE` → BATCH-HARD lub własny pair miner z `pytorch-metric-learning`,
+> - `CIRCLE` → all-pairs (bez minera) — strata sama waży wszystkie pary; w serii F użyto BATCH-HARD (zob. §0),
 > - `CE`, `ARC` → **losowy sampler** niezależnie od `S*` (PK-SA daje w batchu klasy tylko z 1 akcji → softmax na dziesiątkach tysięcy klas degeneruje).
 >
 > XBM z pakietu `S*` dziedziczymy jeśli był i jeśli strata jest parowa.
@@ -195,7 +213,7 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
   - `bnneck` — klasyczna wersja Luo et al. (BoT-ReID): triplet na cechach **przed** BN, klasyfikator na cechach **po** BN+FC; używana dla wariantu hybrydowego §7.3,
   - `plain` — bez końcowej L2, opcjonalnie bez końcowego BN (do ablacji §7.1),
   - `classifier_cut` — głowa klasyfikacyjna na czas treningu, odcinana w inferencji (Wariant K §7.3, F0b).
-- **Optymalizator**: Adam(lr=3.5e-4, wd=5e-4), cosine schedule z warmup 5 epok.
+- **Optymalizator**: Adam(lr=3.5e-4), cosine schedule z warmup 5 epok. Weight decay: 0 w serii G, 5e-4 w serii F (zob. §0).
 - **Definicja epoki**: przy samplerach PK-style jeden batch nie odpowiada „przeglądowi datasetu". Przyjmujemy **epoka = 5000 iteracji** (≈ jeden przegląd 225 k próbek dla batcha 32; PK-SA z batch 16 widzi w sumie połowę próbek na epokę — patrz uwaga w §3 o porównywalności samplerów).
 - **Epoki**: 60 (plateau na podobnych re-id setupach ok. 40–50). W Fazach 1–3 można skrócić do 40 epok i tylko najlepsze konfiguracje przedłużyć do 60.
 - **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Dostępna pamięć GPU: **RTX 3080 Laptop = 16 GB VRAM** (zweryfikowane przez `nvidia-smi`), wszystkie backbone'y z planu (R18..VGG16-BN) mieszczą się w batch=32 + AMP bez kompromisów — cloud nie jest konieczny dla Faz 1-5. Wyjątek: EB2 wymaga AMP=false (patrz §2.A footnote).

@@ -171,8 +171,42 @@ class TestMinerOverride:
         assert build_loss("cont", embedding_dim=D).miner_name == "none"
         # ms -> multi-similarity
         assert build_loss("ms", embedding_dim=D).miner_name == "multi-similarity"
-        # circle -> batch-hard
-        assert build_loss("circle", embedding_dim=D).miner_name == "batch-hard"
+        # circle -> none: the loss weights all pairs itself (Sun et al. 2020)
+        assert build_loss("circle", embedding_dim=D).miner_name == "none"
+
+    def test_circle_default_is_the_all_pairs_loss_of_the_paper(self) -> None:
+        """Default Circle loss == Eq. (4) of Sun et al. computed by hand over all pairs."""
+        torch.manual_seed(3)
+        emb = torch.randn(8, D)
+        lbl = torch.tensor([0, 0, 1, 1, 2, 2, 3, 3])
+        m, gamma = 0.25, 64
+        got = build_loss("circle", embedding_dim=D, m=m, gamma=gamma).call(emb, lbl)
+
+        e = torch.nn.functional.normalize(emb, dim=1)
+        sim = e @ e.T
+        same = lbl[:, None] == lbl[None, :]
+        eye = torch.eye(len(lbl), dtype=torch.bool)
+        per_anchor = []
+        for i in range(len(lbl)):
+            s_p = sim[i][same[i] & ~eye[i]]
+            s_n = sim[i][~same[i]]
+            assert len(s_p) == 1 and len(s_n) == 6   # every negative of the batch is used
+            logit_p = -gamma * torch.relu(1 + m - s_p) * (s_p - (1 - m))
+            logit_n = gamma * torch.relu(s_n + m) * (s_n - m)
+            per_anchor.append(torch.nn.functional.softplus(
+                torch.logsumexp(logit_p, dim=0) + torch.logsumexp(logit_n, dim=0)))
+        expected = torch.stack(per_anchor).mean()
+        assert got.item() == pytest.approx(expected.item(), rel=1e-5)
+
+    def test_circle_with_batch_hard_miner_is_a_different_loss(self) -> None:
+        """The May 2026 variant (one mined pair per anchor) stays available but is not the default."""
+        torch.manual_seed(3)
+        emb = torch.randn(8, D)
+        lbl = torch.tensor([0, 0, 1, 1, 2, 2, 3, 3])
+        all_pairs = build_loss("circle", embedding_dim=D).call(emb, lbl)
+        mined = build_loss("circle", embedding_dim=D, miner="batch-hard")
+        assert mined.miner_name == "batch-hard"
+        assert mined.call(emb, lbl).item() != pytest.approx(all_pairs.item(), rel=1e-3)
 
     def test_unknown_miner_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown miner"):
