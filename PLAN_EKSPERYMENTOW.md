@@ -12,6 +12,8 @@
 
 Przebiegi z maja 2026 (nazwy `F0`–`F5`) są od października 2026 powtarzane jako seria `G` z poniższymi zmianami. Reszta ustawień (lr, harmonogram, definicja epoki, ziarno, głowa modelu) jest bez zmian. **Sekcje §1–§10 opisują stan obowiązujący dla serii G**; fragmenty dotyczące wyłącznie serii F są oznaczone jako zapis historyczny.
 
+**W tekście pracy opisujemy wyłącznie serię G.** O serii F, o wykrytych w niej błędach i o ich diagnozie (w tym o parze przebiegów `DIAG_BOT_*`) w pracy nie piszemy — decyzja z 7.10.2026. Zapisy o serii F w tym dokumencie są notatką roboczą.
+
 | Zmiana | Seria F (maj) | Seria G | Powód |
 |---|---|---|---|
 | Weight decay | 5e-4 (L2 wbudowane w `torch.optim.Adam`) | 0 | L2 w Adamie jest dzielone przez skalę gradientu, więc przy stratach o małym gradiencie (triplet, MS, contrastive) ściągało wagi do zera: na końcu treningu 97–99% wag konwolucji było zerami, a przebiegi AUG-STRONG / AUG-BOT kończyły z zerowymi embeddingami. Ten sam przebieg AUG-BOT z wd=0 daje mAP 0,785 (`DIAG_BOT_WD5E4` vs `DIAG_BOT_WD0`). |
@@ -280,7 +282,7 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 > | 7 | Krzywa zbieżności | pełne — mAP co 5 epok w każdym przebiegu; `G0a` (60 epok) i `G1_PK_BH` (40 epok) to ta sama konfiguracja | — |
 > | 8 | K w samplerze | brak | 2 przebiegi |
 >
-> Poza listą: wpływ weight decay na stan sieci jest już zbadany parą przebiegów `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0` (§0).
+> Poza listą: wpływ weight decay na stan sieci zbadano parą przebiegów `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0` (§0) — to notatka robocza, w pracy nieopisywana.
 
 1. **L2-normalizacja embeddingu**: porównanie 3 wariantów głowy × 2 metryki dystansu = **6 konfiguracji** (na 1 najlepszym backbonie + stracie):
    - **Warianty głowy**: (a) `FC → BN → L2` [pełna], (b) `FC → BN` [bez L2], (c) `FC` [bez BN, bez L2].
@@ -323,7 +325,8 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 8. **Ablacje** z §7 w jednej sekcji.
 9. **Tabela porównawcza z leaderboardem 2023** — uczciwe pozycjonowanie pracy względem SOTA, z zastrzeżeniem, że leaderboard liczono na zbiorze `challenge/`, a nasze wyniki na `valid/` i `test/`.
 10. **Re-ranking** dla najlepszych konfiguracji na `valid/` i `test/` (§6.7).
-11. **Diagnoza collapse'u z serii F**: wpływ weight decay w Adamie na odsetek niezerowych wag (przebiegi `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0`).
+
+Do pracy nie wchodzi nic z serii F ani diagnoza jej błędów (§0).
 
 ---
 
