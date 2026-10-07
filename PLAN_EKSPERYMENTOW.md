@@ -240,7 +240,7 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 - **Optymalizator**: Adam(lr=3.5e-4), cosine schedule z warmup 5 epok. Weight decay: 0 w serii G, 5e-4 w serii F (zob. §0).
 - **Definicja epoki**: przy samplerach PK-style jeden batch nie odpowiada „przeglądowi datasetu". Przyjmujemy **epoka = 5000 iteracji** (≈ jeden przegląd 225 k próbek dla batcha 32; PK-SA z batch 16 widzi w sumie połowę próbek na epokę — patrz uwaga w §3 o porównywalności samplerów).
 - **Epoki**: 40 w Fazach 1–4, 60 w Fazie 0 i w Fazie 5.
-- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Jeden przebieg zajmuje ok. 2 GB pamięci karty.
+- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Przebieg R18 lub EfficientNet zajmuje do ok. 2 GB pamięci karty (zmierzone); dla VGG nie mierzono.
 - **Precyzja obliczeń**: pełna (FP32) we wszystkich przebiegach; mixed precision (AMP) wyłączone (§0).
 - **Ziarna**: jedno ziarno (0) dla każdej konfiguracji. Różnice poniżej ok. 1 pp mAP nie są więc rozstrzygające — ograniczenie do zapisania w pracy.
 - **Ewaluacja w trakcie treningu**: na zbiorze walidacyjnym co 5 epok; zapisywany jest checkpoint o najwyższym mAP.
