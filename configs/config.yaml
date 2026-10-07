@@ -73,6 +73,13 @@ wandb:
   mode: online       # online / offline / disabled
   tags: []
   notes: ""
+  # When best.pt is uploaded to W&B as an artifact:
+  #   improvement  after every evaluation that sets a new best (one version each)
+  #   end          once, after training - use it with eval.every_n_epochs=1: a
+  #                checkpoint of a classification run is ~1 GB (the classifier has
+  #                one row per training class) and could be uploaded dozens of times
+  #   off          never; the checkpoint stays in output_dir
+  upload_best: improvement
 
 # Outputs
 output_dir: outputs/runs/${experiment_name}

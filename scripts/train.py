@@ -123,6 +123,56 @@ def _build_train_loader(cfg: DictConfig, train_df: pd.DataFrame, num_iters: int)
     return loader
 
 
+_UPLOAD_BEST_MODES = ("improvement", "end", "off")
+
+
+def _upload_best_mode(cfg: DictConfig) -> str:
+    """When best.pt goes to W&B as an artifact (see `wandb.upload_best` in config.yaml)."""
+    mode = str(cfg.wandb.get("upload_best", "improvement"))
+    if mode not in _UPLOAD_BEST_MODES:
+        raise ValueError(f"wandb.upload_best must be one of {_UPLOAD_BEST_MODES}, got {mode!r}")
+    return mode
+
+
+def _upload_best_checkpoint(
+    wandb_run, cfg: DictConfig, ckpt_path: Path, epoch: int, metrics: dict, embedding_dim: int
+) -> None:
+    """Log best.pt as a versioned W&B artifact (recoverable from any machine).
+
+    Wrapped in try/except so a network blip doesn't crash the training run.
+    """
+    best_map = metrics["mAP"]
+    try:
+        import wandb
+        artifact = wandb.Artifact(
+            name=f"{cfg.experiment_name}-best",
+            type="model",
+            description=(
+                f"Best valid mAP={best_map:.4f} at epoch {epoch} "
+                f"({cfg.backbone.name}+{cfg.head.name}+{cfg.loss.name})"
+            ),
+            metadata={
+                "epoch": epoch,
+                "valid_mAP": best_map,
+                "valid_rank_1": metrics.get("rank-1"),
+                "valid_rank_5": metrics.get("rank-5"),
+                "valid_rank_10": metrics.get("rank-10"),
+                "backbone": cfg.backbone.name,
+                "head": cfg.head.name,
+                "loss": cfg.loss.name,
+                "embedding_dim": embedding_dim,
+            },
+        )
+        artifact.add_file(str(ckpt_path))
+        wandb_run.log_artifact(
+            artifact,
+            aliases=[f"epoch-{epoch}", f"map-{best_map:.4f}", "best"],
+        )
+        print(f"  Uploaded checkpoint to W&B as '{cfg.experiment_name}-best'")
+    except Exception as e:
+        print(f"  W&B artifact upload failed (non-fatal): {e}")
+
+
 def _wandb_init(cfg: DictConfig, output_dir: Path):
     if not cfg.wandb.enabled:
         return None
@@ -238,7 +288,8 @@ def main(cfg: DictConfig) -> None:
         print(f"Stopping after epoch {last_epoch} of {cfg.num_epochs} "
               f"(the LR schedule still spans {cfg.num_epochs} epochs)")
 
-    best_map = -1.0
+    upload_best = _upload_best_mode(cfg)
+    best_map, best_epoch, best_metrics = -1.0, -1, {}
     for epoch in range(last_epoch):
         t0 = time.perf_counter()
         train_metrics = train_one_epoch(
@@ -312,45 +363,21 @@ def main(cfg: DictConfig) -> None:
                 ckpt_path = output_dir / "best.pt"
                 torch.save(ckpt, ckpt_path)
                 print(f"  Saved best checkpoint -> {ckpt_path} (mAP={best_map:.4f})")
-
-                # W&B Artifact upload (versioned checkpoint, recoverable from any machine).
-                # Wrapped in try/except so a network blip doesn't crash the training run.
-                if wandb_run is not None:
-                    try:
-                        import wandb
-                        artifact = wandb.Artifact(
-                            name=f"{cfg.experiment_name}-best",
-                            type="model",
-                            description=(
-                                f"Best valid mAP={best_map:.4f} at epoch {epoch} "
-                                f"({cfg.backbone.name}+{cfg.head.name}+{cfg.loss.name})"
-                            ),
-                            metadata={
-                                "epoch": epoch,
-                                "valid_mAP": best_map,
-                                "valid_rank_1": eval_metrics.get("rank-1"),
-                                "valid_rank_5": eval_metrics.get("rank-5"),
-                                "valid_rank_10": eval_metrics.get("rank-10"),
-                                "backbone": cfg.backbone.name,
-                                "head": cfg.head.name,
-                                "loss": cfg.loss.name,
-                                "embedding_dim": embedding_dim,
-                            },
-                        )
-                        artifact.add_file(str(ckpt_path))
-                        wandb_run.log_artifact(
-                            artifact,
-                            aliases=[f"epoch-{epoch}", f"map-{best_map:.4f}", "best"],
-                        )
-                        print(f"  Uploaded checkpoint to W&B as '{cfg.experiment_name}-best'")
-                    except Exception as e:
-                        print(f"  W&B artifact upload failed (non-fatal): {e}")
+                best_epoch, best_metrics = epoch, dict(eval_metrics)
+                if wandb_run is not None and upload_best == "improvement":
+                    _upload_best_checkpoint(
+                        wandb_run, cfg, ckpt_path, epoch, eval_metrics, embedding_dim
+                    )
 
         if wandb_run is not None:
             wandb_run.log(epoch_log)
 
     print(f"\nDone. Best valid mAP: {best_map:.4f}")
     if wandb_run is not None:
+        if upload_best == "end" and best_epoch >= 0:
+            _upload_best_checkpoint(
+                wandb_run, cfg, output_dir / "best.pt", best_epoch, best_metrics, embedding_dim
+            )
         wandb_run.finish()
 
 

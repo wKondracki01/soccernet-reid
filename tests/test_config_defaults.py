@@ -21,3 +21,8 @@ def test_no_weight_decay_by_default() -> None:
 def test_full_precision_by_default() -> None:
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     assert cfg["amp"] is False
+
+
+def test_best_checkpoint_uploaded_on_every_improvement_by_default() -> None:
+    cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    assert cfg["wandb"]["upload_best"] == "improvement"
