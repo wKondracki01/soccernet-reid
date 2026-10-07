@@ -10,7 +10,7 @@
 
 ## 0. Seria G (październik 2026) — zmiany względem serii F z maja 2026
 
-Wszystkie przebiegi z maja 2026 (nazwy `F0`–`F5`) zostały powtórzone jako seria `G0`–`G5` z następującymi zmianami. Reszta ustawień (lr, harmonogram, definicja epoki, ziarno, głowa modelu, warianty w osiach) jest bez zmian.
+Przebiegi z maja 2026 (nazwy `F0`–`F5`) są od października 2026 powtarzane jako seria `G` z poniższymi zmianami. Reszta ustawień (lr, harmonogram, definicja epoki, ziarno, głowa modelu) jest bez zmian. **Sekcje §1–§10 opisują stan obowiązujący dla serii G**; fragmenty dotyczące wyłącznie serii F są oznaczone jako zapis historyczny.
 
 | Zmiana | Seria F (maj) | Seria G | Powód |
 |---|---|---|---|
@@ -24,6 +24,10 @@ Wszystkie przebiegi z maja 2026 (nazwy `F0`–`F5`) zostały powtórzone jako se
 | Rozmycie w AUG-STRONG | każdy obraz (p = 1) | losowo, p = 0,5 | pozostałe operacje zestawu są losowe; przy p = 1 trening widział wyłącznie rozmyte wycinki, a ewaluacja żadnych |
 | Kolejność osi | 1 dobór przykładów → 2 strata → 3 backbone → 4 augmentacje | 1 dobór przykładów → 2 strata → **3 augmentacje (na R18) → 4 backbone (z wybraną augmentacją)** | porównanie sieci przy samym odbiciu poziomym sprzyja małym sieciom; w serii F ranking backbone'ów zmienił się po przejściu na AUG-MED |
 | Oś 1 — warianty | RAND, PK-BH, PK-SH, PK-SA-BH, PK-BH-XBM | te same + PK-SA-SH i PK-SA-BH-XBM | semi-hard i XBM były sprawdzone tylko z samplerem PK |
+| Oś 5 | 6 kombinacji (§3, zapis historyczny) | skład do ustalenia po przeglądzie osi 1–4 | zwycięzcy osi mogą być inni niż w serii F |
+| Przejście między osiami | kolejna oś uruchamiana po odczytaniu zwycięzcy | po każdej osi przegląd wyników (czy przebiegi przeszły poprawnie) i dopiero decyzja o konfiguracji następnej | kontrola przed dalszymi kosztami |
+| Zbiór treningowy | 225 643 wycinki / 138 852 klasy — 9 plików pominiętych (nazwy zniekształcone przy rozpakowaniu na Windowsie) | 225 652 / 138 861 (komplet) | na maszynie z Linuksem nazwy plików przywrócono z adnotacji; samplery PK tych plików i tak nie losują (klasy jednoelementowe) |
+| Sprzęt | laptop z RTX 3080 (16 GB), jeden przebieg naraz | wynajęta maszyna z 2 × RTX 4090, do 9 przebiegów równolegle | czas; pojedynczy przebieg trwa podobnie, bo ogranicza go procesor, nie karta |
 
 Wnioski serii F o collapse'ie AUG-STRONG / AUG-BOT (niżej w tym dokumencie) dotyczą starego optymalizatora i nie opisują własności augmentacji. Opisy poniżej zostają jako zapis stanu z maja 2026.
 
@@ -53,21 +57,23 @@ Wnioski serii F o collapse'ie AUG-STRONG / AUG-BOT (niżej w tym dokumencie) dot
 
 ## 2. Cztery osie eksperymentalne
 
-Pełny iloczyn kartezjański (6 backbone'ów × 6 strat × 5 samplerów × 4 augmentacje = 720 przebiegów) jest niewykonalny. Stosujemy **podejście „krzyżowe"**: ustalamy *baseline* na każdej osi, zmieniamy jedną oś naraz, a najlepsze kombinacje testujemy w fazie końcowej.
+Pełny iloczyn kartezjański (6 backbone'ów × 6 strat × 7 pakietów doboru przykładów × 4 augmentacje = 1008 przebiegów) jest niewykonalny. Stosujemy **podejście „krzyżowe"**: ustalamy *baseline* na każdej osi, zmieniamy jedną oś naraz, a najlepsze kombinacje testujemy w fazie końcowej.
 
 ### Oś A — backbone (ekstraktor cech)
-Wszystkie pretrenowane na ImageNet, wymieniona głowa → embedding `D = 512` (po BNNeck + L2-norm).
+Wszystkie pretrenowane na ImageNet, wymieniona głowa → embedding `D = 512` (głowa `projection`: BN → FC → BN → L2-norm, §5).
 
 | Kod | Architektura | ~Parametry | Uwaga |
 |-----|--------------|-----------:|-------|
-| `R18` | ResNet-18 | 11 M | mały punkt odniesienia |
-| `R34` | ResNet-34 | 21 M | środek skali |
-| `EB1` | EfficientNet-B1 | 7 M | wydajny EfficientNet, AMP=true |
-| `EB2`\* | EfficientNet-B2 | 9 M | większy EfficientNet, **AMP=false** (workaround dla bug'a opisanego niżej) |
-| `VGG11-BN` | VGG-11 z BatchNorm | 131 M | shallow VGG (8 conv layers) |
-| `VGG16-BN` | VGG-16 z BatchNorm | 138 M | mid VGG (13 conv layers) |
+| `R18` | ResNet-18 | 11,4 M | mały punkt odniesienia |
+| `R34` | ResNet-34 | 21,5 M | środek skali |
+| `EB1` | EfficientNet-B1 | 7,2 M | wydajny EfficientNet |
+| `EB2` | EfficientNet-B2 | 8,4 M | większy EfficientNet |
+| `VGG11-BN` | VGG-11 z BatchNorm | 130,9 M | shallow VGG (8 conv layers) |
+| `VGG16-BN` | VGG-16 z BatchNorm | 136,4 M | mid VGG (13 conv layers) |
 
-> **\*Notatka o EB2 + EfficientNet B2+ z AMP**: pierwotnie plan zakładał `EB2` jako drugi EfficientNet point. Trening EB2 z PK-SA-BH sampler (batch=16) + **AMP=true** crashował 3× pod rząd z `CUDA error: invalid argument` (różne miejsca: `BatchHardMiner` lub `AMP scaler`), powtarzalnie nawet po reboot'cie i update driver'a NVIDIA (591.86 → 596.49). Test z **EB3** (12 M) dał identyczny crash w `scaler.step()` AMP. Test z **EB4** (19 M) miał inny failure mode: trening nie crashował explicit'nie, ale eval mode dawał **identyczne mAP=0.2808 we wszystkich 4 epokach eval** (to dokładnie wynik modelu zwracającego ten sam wektor dla każdego obrazu — zweryfikowane: stały embedding daje na valid mAP 0.2808 / R-1 0.1235 / R-5 0.5143 / R-10 0.7762, identycznie jak EB4; dla porównania R18 z ImageNet bez żadnego uczenia daje 0.3295, a losowy ranking 0.1942) — wskazuje na FP16 underflow w BatchNorm running statistics, które propaguje przez momentum update do permanently corrupted running_mean/running_var. **Empirycznie potwierdzony root cause**: PyTorch AMP + EfficientNet B2+ (depthwise convs + dużo BN layers) + small batch (16 z PK-SA-BH) = numerical instability w FP16. **Rozwiązanie**: trening **EB2 z AMP=false (FP32)** — eliminuje source 3 różnych failure modes (eksperymentalnie zweryfikowane: F3_EB2 z AMP=false zakończyło 40 epok stabilnie z mAP=0.7054). Wybrano EB2 zamiast EB3/EB4 jako "wystarczająco większy" point ponieważ pattern z całej Fazy 3 (R18→R34 +0.32pp; EB1 7M bije R34 21M) wskazuje że na 225k próbkach skalowanie EfficientNet poza B1 przynosi diminishing returns. Asterisk dla EB2 w tabeli wynikowej: *"trained in FP32 (AMP disabled) due to documented PyTorch AMP+EfficientNet+small-batch instability; AMP-on vs AMP-off typically differs <0.5pp mAP in literature"*.
+Liczby parametrów: sieć z głową `projection`, bez klasyfikatora. W serii G wszystkie sieci są trenowane w pełnej precyzji (FP32).
+
+> **Zapis historyczny (seria F, maj 2026) — EfficientNet-B2 i większe z AMP**: pierwotnie plan zakładał `EB2` jako drugi EfficientNet point. Trening EB2 z PK-SA-BH sampler (batch=16) + **AMP=true** crashował 3× pod rząd z `CUDA error: invalid argument` (różne miejsca: `BatchHardMiner` lub `AMP scaler`), powtarzalnie nawet po reboot'cie i update driver'a NVIDIA (591.86 → 596.49). Test z **EB3** (12 M) dał identyczny crash w `scaler.step()` AMP. Test z **EB4** (19 M) miał inny failure mode: trening nie crashował explicit'nie, ale eval mode dawał **identyczne mAP=0.2808 we wszystkich 4 epokach eval** (to dokładnie wynik modelu zwracającego ten sam wektor dla każdego obrazu — zweryfikowane: stały embedding daje na valid mAP 0.2808 / R-1 0.1235 / R-5 0.5143 / R-10 0.7762, identycznie jak EB4; dla porównania R18 z ImageNet bez żadnego uczenia daje 0.3295, a losowy ranking 0.1942) — wskazuje na FP16 underflow w BatchNorm running statistics, które propaguje przez momentum update do permanently corrupted running_mean/running_var. **Empirycznie potwierdzony root cause**: PyTorch AMP + EfficientNet B2+ (depthwise convs + dużo BN layers) + small batch (16 z PK-SA-BH) = numerical instability w FP16. **Rozwiązanie**: trening **EB2 z AMP=false (FP32)** — eliminuje source 3 różnych failure modes (eksperymentalnie zweryfikowane: F3_EB2 z AMP=false zakończyło 40 epok stabilnie z mAP=0.7054). Wybrano EB2 zamiast EB3/EB4 jako "wystarczająco większy" point ponieważ pattern z całej Fazy 3 (R18→R34 +0.32pp; EB1 7M bije R34 21M) wskazuje że na 225k próbkach skalowanie EfficientNet poza B1 przynosi diminishing returns. Asterisk dla EB2 w tabeli wynikowej: *"trained in FP32 (AMP disabled) due to documented PyTorch AMP+EfficientNet+small-batch instability; AMP-on vs AMP-off typically differs <0.5pp mAP in literature"*. **W serii G** wszystkie przebiegi idą w FP32, więc to obejście nie jest potrzebne, a wniosek o malejących korzyściach ze skalowania pochodzi z serii F (stary optymalizator) i wymaga potwierdzenia w osi 4.
 
 VGG przedstawiony w 2 wariantach (shallow/mid) zgodnie z briefem promotora o „wybranych wariantach VGG" — pozwala wyizolować efekt głębokości od pojemności w rodzinie VGG (oba mają >130 M params dzięki dense FC layers).
 
@@ -76,12 +82,14 @@ Domyślnie embedding po L2-norm dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`)
 
 | Kod | Strata | Hiper-parametry startowe |
 |-----|--------|--------------------------|
-| `CE` | Cross-entropy nad klasami `(action,uid)` (sanity, klasyfikacyjny baseline) | label smoothing 0.1 |
-| `CONT` | Contrastive (parowa, *siamese*) | margin = 0.5 |
-| `TRI` | Triplet loss z hard mining | margin = 0.3 |
-| `MS` | MultiSimilarityLoss | α=2, β=50, λ=1 |
-| `CIRCLE` | CircleLoss | m=0.25, γ=64 |
-| `ARC` | ArcFace — klasyfikator z cosine margin, po treningu odcinany | m=0.5, s=30 |
+| `CE` | Cross-entropy nad klasami `(action,uid)` (klasyfikacyjny punkt odniesienia) | label smoothing 0.1; sampler losowy |
+| `CONT` | Contrastive (parowa, *siamese*) | margines pozytywów 0, negatywów 0.5 (odległość euklidesowa); wszystkie pary w batchu |
+| `TRI` | Triplet loss | margin = 0.3 (odległość euklidesowa); miner wg zwycięzcy osi 1 |
+| `MS` | MultiSimilarityLoss | α=2, β=50, λ=1; Multi-Similarity miner (ε=0.1) |
+| `CIRCLE` | CircleLoss | m=0.25, γ=64; wszystkie pary w batchu, bez minera (strata sama je waży) |
+| `ARC` | ArcFace — klasyfikator z marginesem kątowym, po treningu odcinany | margines 0.5 rad (= 28.6°), s=30; sampler losowy; jeden przebieg |
+
+Każda strata ma jeden zestaw hiperparametrów, wzięty z literatury i niestrojony pod ten zbiór. Ranking strat dotyczy więc tych konkretnych ustawień — ograniczenie do zapisania w pracy.
 
 > **Uwaga terminologiczna**: w temacie pracy „kontrastywna" i „syjamska" to praktycznie ta sama rodzina (sieć bliźniacza + strata kontrastywna). W tabelach traktujemy je jako jeden wpis `CONT` i ewentualnie różnicujemy konfiguracje (parowa vs. trójkowa) w opisie.
 
@@ -91,7 +99,7 @@ Oś C to **pakiety strategii**, łączące dwie ortogonalne decyzje:
 - **Sampler** (co trafia do batcha): `RANDOM`, `PK` (P klas × K próbek), `PK-SA` (PK ograniczone do jednej akcji).
 - **Miner** (co z batcha trafia do straty): `ALL`, `BATCH-HARD`, `SEMI-HARD`.
 
-Testujemy 5 pakietów (a nie pełen iloczyn 3×3) — w pracy zaznaczamy, że nie odróżniamy wkładu samplera od minera w obrębie pakietu, tylko porównujemy strategie jako całości:
+Testujemy 7 pakietów (a nie pełen iloczyn). Dla samplerów PK i PK-SA sprawdzamy te same trzy warianty (batch-hard, semi-hard, batch-hard + XBM), więc wpływ minera i pamięci XBM da się odczytać osobno dla każdego samplera; `RAND` jest punktem odniesienia (tylko 0,35% losowych batchy zawiera parę pozytywną):
 
 | Kod | Sampler | Miner | Dodatek | Komentarz |
 |-----|---------|-------|---------|-----------|
@@ -99,7 +107,9 @@ Testujemy 5 pakietów (a nie pełen iloczyn 3×3) — w pracy zaznaczamy, że ni
 | `PK-BH` | PK | BATCH-HARD | — | klasyka triplet/MS |
 | `PK-SH` | PK | SEMI-HARD | — | FaceNet-style |
 | `PK-SA-BH` | PK-per-action | BATCH-HARD | — | zgodne z protokołem ewaluacji |
-| `PK-BH-XBM` | PK | BATCH-HARD | Cross-Batch Memory | bank cech, dla MS / CircleLoss |
+| `PK-BH-XBM` | PK | BATCH-HARD | Cross-Batch Memory | bank 1024 embeddingów z poprzednich batchy |
+| `PK-SA-SH` | PK-per-action | SEMI-HARD | — | dodany w serii G |
+| `PK-SA-BH-XBM` | PK-per-action | BATCH-HARD | Cross-Batch Memory | dodany w serii G; pamięć zawiera wycinki z innych akcji |
 
 ### Oś D — augmentacje (4 zestawy: 3 z tematu + 1 alternatywa ReID-świadoma)
 Wejście: bbox o zmiennym H×W → resize do **256×128** (standard person re-id), normalizacja ImageNet.
@@ -107,9 +117,11 @@ Wejście: bbox o zmiennym H×W → resize do **256×128** (standard person re-id
 | Zestaw | Skład |
 |--------|-------|
 | `AUG-MIN` | resize, horizontal flip, normalizacja |
-| `AUG-MED` | AUG-MIN + ColorJitter (0.2/0.2/0.2/0.05), RandomCrop z paddingiem, Random Erasing (p=0.5) |
-| `AUG-STRONG` | AUG-MED + RandAugment (n=2, m=9), Gaussian blur, RandomPerspective (p=0.3), RE p=0.5 (Zhong default; pierwsza wersja z p=0.7 powodowała collapse na SoccerNet — patrz git history) |
-| `AUG-BOT` | ReID-aware "strong" wg BoT-ReID (Luo 2019, "Bag of Tricks for ReID"): AUG-MED features + **RandomGrayscale** (p=0.2), stronger ColorJitter (0.4/0.4/0.4/0.1), RE p=0.5 (BoT-ReID/Zhong default). **Bez** RandAugment/Perspective/Blur (te są tunowane pod ImageNet classification i niszczą instance-level cues w person-crops). |
+| `AUG-MED` | AUG-MIN + ColorJitter (0.2/0.2/0.2/0.05), RandomCrop z paddingiem 10 px, Random Erasing |
+| `AUG-STRONG` | AUG-MED + RandAugment (n=2, m=9), Gaussian blur (p=0.5), RandomPerspective (p=0.3) |
+| `AUG-BOT` | ReID-aware "strong" wg BoT-ReID (Luo 2019, "Bag of Tricks for ReID"): AUG-MED z mocniejszym ColorJitter (0.4/0.4/0.4/0.1) + **RandomGrayscale** (p=0.2). **Bez** RandAugment/Perspective/Blur. |
+
+Random Erasing jest identyczne we wszystkich trzech zestawach: p=0.5, 2–40% pola, proporcje 0.3–3.3 (wartości Zhong et al. i BoT-ReID). Zestawy różnią się więc tylko operacjami wymienionymi w tabeli. Collapse AUG-STRONG / AUG-BOT z serii F nie wynikał z augmentacji, tylko z weight decay (§0).
 
 Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Świadomie nie stosujemy **MixUp/CutMix** — te augmentacje mieszają etykiety, co działa tylko w klasyfikacji (CE/ARC); w stratach metric learning (CONT/TRI/MS/CIRCLE) nie istnieje „częściowo pozytywna para", więc miksowanie obrazów psułoby mining. AUG-STRONG musi działać z każdą stratą z Osi B, dlatego ograniczamy się do augmentacji obrazo-tylko.
 
@@ -124,39 +136,46 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 ## 3. Macierz eksperymentów — podejście etapowe
 
 **Konfiguracja referencyjna** (start każdej osi):
-`R18 + TRI + PK-BH + AUG-MIN`, embedding D=512, 60 epok, Adam(lr=3.5e-4, wd=5e-4), cosine LR z warmup 5 epok, batch **P=16/K=2 (=32)** dla samplerów cross-action; **P=8/K=2 (=16)** dla samplerów per-action (PK-SA).
+`R18 + TRI + PK-BH + AUG-MIN`, embedding D=512, 60 epok, Adam(lr=3.5e-4, weight decay 0 — §0), cosine LR z warmup 5 epok, batch **P=16/K=2 (=32)** dla samplerów cross-action; **P=8/K=2 (=16)** dla samplerów per-action (PK-SA).
 
-> **Uzasadnienie P×K = 16×2 zamiast 16×4**: w SoccerNet ReID rozkład próbek per (action, uid) jest skrajnie *płaski* — 54.8% par jest singletonami, 33.5% ma dokładnie 2 próbki, maksimum to 8–10. **Tylko 4 z 9 181 akcji** ma 16 ID z ≥4 próbkami każde (=plan z K=4 dla PK-SA wycina 99.96% akcji); 39.5% akcji ma 8 ID z ≥2 próbkami (=PK-SA z P=8/K=2 jest wykonalny). K=4 wycina globalnie 90% datasetu, K=3 wycina 75%, K=2 zachowuje 66% próbek. Konwencje literatury z Market-1501 (K=4 standard, bo ID mają 15–30 zdjęć) **nie przenoszą się 1:1** na ten dataset — to dataset-specyficzny fakt udokumentowany w pracy.
+> **Uzasadnienie P×K = 16×2 zamiast 16×4**: w SoccerNet ReID rozkład próbek per (action, uid) jest skrajnie *płaski* — 54.8% par jest singletonami, 33.5% ma dokładnie 2 próbki, maksimum to 9. **Tylko 4 z 9 181 akcji** ma 16 ID z ≥4 próbkami każde (=plan z K=4 dla PK-SA wycina 99.96% akcji); 39.5% akcji ma 8 ID z ≥2 próbkami (=PK-SA z P=8/K=2 jest wykonalny). K=4 wycina globalnie 90% datasetu, K=3 wycina 75%, K=2 zachowuje 66% próbek. Konwencje literatury z Market-1501 (K=4 standard, bo ID mają 15–30 zdjęć) **nie przenoszą się 1:1** na ten dataset — to dataset-specyficzny fakt udokumentowany w pracy.
 
 ### Faza 0 — sanity check i punkty odniesienia
 - **F0a**: konfiguracja referencyjna do końca, zapisany checkpoint.
 - **F0b**: **Wariant K (classifier baseline)** — `R18 + CE + losowy sampler` na wszystkich klasach `(action,uid)` z train po filtrze klas zawodniczych = **138 861 klas / 225 652 próbki** (singletony zostawione — klasyfikator z natury nie potrzebuje par, podobnie jak ArcFace na MS-Celeb-1M). Po treningu ucinamy głowę FC i używamy embeddingu. To drugi punkt odniesienia (klasyfikacja vs. metric learning, użyty potem w ablacji §7.3). Klasyfikator FC: 512 × 138 861 ≈ **71 M parametrów** samej głowy; logity per batch 32 w fp32 ≈ 17.6 MB.
-- Walidacja narzędzia: nasz evaluator musi dać identyczny wynik co `tools/evaluate_soccernetv3_reid.py` z repo `sn-reid` na losowych embeddingach z `R18-ImageNet` (smoke test, do 4 miejsc po przecinku).
+- Walidacja narzędzia: nasz evaluator daje identyczny wynik co oficjalny `SoccerNet.Evaluation.ReIdentification.evaluate` — sprawdzane testami jednostkowymi na losowych rankingach oraz skryptem `scripts/smoke_eval.py` na cechach `R18-ImageNet` (różnica 0).
+- Wartości odniesienia bez treningu (valid): losowy ranking mAP 0.1942, stały wektor 0.2808, `R18-ImageNet` 0.3295.
 
 ### Faza 1 — oś C (sampler+miner)
-`R18 + TRI`, pakiet ∈ {`RAND, PK-BH, PK-SH, PK-SA-BH, PK-BH-XBM`}. **5 przebiegów.** → wybieramy `S*`.
+`R18 + TRI + AUG-MIN`, 40 epok, pakiet ∈ {`RAND, PK-BH, PK-SH, PK-BH-XBM, PK-SA-BH, PK-SA-SH, PK-SA-BH-XBM`}. **7 przebiegów.** → wybieramy `S*`.
 
 ### Faza 2 — oś B (strata)
-`R18 + S*`, strata ∈ {`CE, CONT, TRI, MS, CIRCLE, ARC`}. **6 przebiegów.** → wybieramy `L*`.
+`R18 + S* + AUG-MIN`, 40 epok, strata ∈ {`CE, CONT, TRI, MS, CIRCLE, ARC`}. **6 wpisów** (TRI to zwycięzca osi 1; 5 nowych przebiegów). → wybieramy `L*`.
 
 > **Doprecyzowanie samplera/minera**: z pakietu `S*` przenosimy do Fazy 2 tylko **sampler**, **miner dobieramy do straty** zgodnie z literaturą:
 > - `CONT` → all-pairs (bez minera),
-> - `TRI` → BATCH-HARD (z `S*`, jeśli ma) lub SEMI-HARD,
+> - `TRI` → miner zwycięskiego pakietu z osi 1,
 > - `MS` → `MultiSimilarityMiner` (część definicji straty),
 > - `CIRCLE` → all-pairs (bez minera) — strata sama waży wszystkie pary; w serii F użyto BATCH-HARD (zob. §0),
 > - `CE`, `ARC` → **losowy sampler** niezależnie od `S*` (PK-SA daje w batchu klasy tylko z 1 akcji → softmax na dziesiątkach tysięcy klas degeneruje).
 >
-> XBM z pakietu `S*` dziedziczymy jeśli był i jeśli strata jest parowa.
+> XBM z pakietu `S*` dziedziczymy jeśli był i jeśli strata jest parowa — do potwierdzenia przy przeglądzie wyników osi 1.
+>
+> `ARC`: jeden przebieg, z właściwym marginesem 0.5 rad (28.6°). W serii F margines wynosił przez błąd jednostek 0.5°.
 >
 > **Doprecyzowanie głowy modelu**: Faza 2 używa domyślnej głowy `projection` (BN→FC→BN→L2-norm) dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`) i dla `ARC` (ArcFace ma wewnętrzny scale=30 który neutralizuje saturację logitów). Wyjątek dla `CE`: musi używać głowy **`classifier_cut`** (raw features, bez L2-norm), ponieważ L2-norma na 138k-class CE classifierze powoduje saturację — logity skalują się do ~[-0.06, 0.06], softmax wychodzi praktycznie uniform, gradient zerowy, train loss zatrzymuje się na `ln(138852)≈11.84`. Empirycznie zweryfikowane (F2_CE v1 z projection head: train_loss stale 11.84 przez 40 epok, mAP=0.363). Z `classifier_cut`: normalna konwergencja. Same head jak w Wariancie K (F0b) z §7.3, ale F2_CE używa 40 epok dla spójności tabeli Fazy 2.
 
-### Faza 3 — oś A (backbone)
-`{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN} + S* + L*`. **6 wpisów łącznie** (R18 reuse z F1_PK_SA_BH, pozostałe 5 to nowe runy). → wybieramy `B*`.
+### Faza 3 — oś D (augmentacje)
+`R18 + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG, AUG-BOT}`, 40 epok. **4 wpisy** (AUG-MIN to zwycięzca osi 2; 3 nowe przebiegi, nazwy `G3_AUG_*`). → wybieramy `A*`, wykres „augmentacja vs. mAP".
 
-### Faza 4 — oś D (augmentacje)
-`B* + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG, AUG-BOT}`. **4 wpisy** (AUG-MIN reuse z F3, pozostałe 3 to nowe runy). → wykres „augmentacja vs. mAP".
+### Faza 4 — oś A (backbone)
+`{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN} + S* + L* + A*`, 40 epok. **6 wpisów** (R18 to zwycięzca osi 3; 5 nowych przebiegów, nazwy `G4_*`). → wybieramy `B*`.
+
+> W serii F kolejność była odwrotna (backbone'y przy AUG-MIN, potem augmentacje na `B*`). Zmiana: porównanie sieci przy samym odbiciu poziomym sprzyja małym sieciom (§0).
 
 ### Faza 5 — interakcje
+> **Seria G: skład osi 5 nie jest ustalony.** Zostanie zaprojektowany po zakończeniu i przeglądzie osi 1–4, bo zwycięzcy osi mogą być inni niż w serii F. Poniższy opis to zapis historyczny serii F; jego uzasadnienia odwołują się do wyników ze starym optymalizatorem.
+
 Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 epok** (zamiast 40 z Faz 1-3) — finalna konfiguracja zasługuje na pełny budżet czasowy, a krzywa AUG-MED w Fazie 4 wciąż rosła w ep 40.
 
 **Wybór 6 runów** podzielony na 4 grupy pytań:
@@ -183,16 +202,18 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 
 **Mapowanie do tabeli E** (§6 raportowanie): tabela porównawcza wszystkich 6 kombinacji + wykres CMC dla top-3 + wybór Wariantu M.
 
-**Łącznie Fazy 0–5**: ~27–32 pełnych przebiegów + sanity checks (Faza 3 = 6 backbone'ów: R18, R34, EB1, EB2, VGG11-BN, VGG16-BN; Faza 4 = 4 zestawy augmentacji).
-**Plus ablacje §7**: ~12–15 dodatkowych **treningów** (§7.1: 3 warianty głowy = 3, distance to wybór inferencji bez kosztu; §7.2 wymiar D: 5; §7.3 hybrydowy wariant H: 1 dodatkowy; §7.4 pretraining: 1; §7.5 pooling: 1; §7.6/§7.7 darmowe — post-hoc / z istniejących checkpointów; §7.8 efekt K: 2). Wariant K i Wariant M w §7.3 są już w F0b i Fazie 5 — nie liczymy podwójnie.
+**Seria G — liczba przebiegów przed osią 5**: faza 0: 2, faza 1: 7, faza 2: 5, faza 3: 3, faza 4: 5 — razem **22**. Skład osi 5 do ustalenia.
+
+*Zapis historyczny (plan serii F):* **Łącznie Fazy 0–5**: ~27–32 pełnych przebiegów + sanity checks (6 backbone'ów: R18, R34, EB1, EB2, VGG11-BN, VGG16-BN; 4 zestawy augmentacji).
+**Plus ablacje §7** (nie są częścią serii G; decyzja, które wykonać, po osi 5): ~12–15 dodatkowych **treningów** (§7.1: 3 warianty głowy = 3, distance to wybór inferencji bez kosztu; §7.2 wymiar D: 5; §7.3 hybrydowy wariant H: 1 dodatkowy; §7.4 pretraining: 1; §7.5 pooling: 1; §7.6/§7.7 darmowe — post-hoc / z istniejących checkpointów; §7.8 efekt K: 2). Wariant K i Wariant M w §7.3 są już w F0b i Fazie 5 — nie liczymy podwójnie.
 **Razem**: **~41–46 przebiegów** (~27-32 z Faz 0-5 + 12-15 z ablacji §7).
 
-**Realny czas**: dla 225k próbek przy batch 32 (5000 iter/epoka, def. §5) i 60 epokach jeden przebieg R18 to ok. **2–4 h** na GPU klasy 3080/A6000 (mniejszy batch + krótsza forward niż w Market-1501 setup). Dla EB2 (z AMP=false workaround) / VGG11-16 ok. **4–7 h** per backbone. Łączny budżet GPU: **5–12 dni ciągłej pracy** (1 GPU), realnie 2–3 tyg. z przerwami. Akceleratory: AMP (gdzie nie crashuje), skrócenie do 40 epok w Fazach 1–3, checkpoint co N epok + early-stop przy braku poprawy mAP przez 10 epok.
+**Czas (seria G)**: przebieg R18 na 40 epok trwa ok. 2–2,5 h, EfficientNet ok. 4 h, 60 epok odpowiednio dłużej. Przebiegi jednej osi idą równolegle na wynajętej maszynie, więc czas osi wyznacza jej najdłuższy przebieg. Czasów epok z serii G nie używamy do porównań szybkości (zaburza je równoległość) — szybkość każdej sieci mierzona osobno. *Seria F:* ok. 131 h pracy GPU na laptopie, przebiegi jeden po drugim.
 
 **Uwaga o porównywalności samplerów (Faza 1)**: PK-SA ma efektywny batch 16 vs. 32 dla pozostałych — utrzymujemy **tę samą liczbę iteracji (=update'ów wagowych)** dla wszystkich, akceptując że PK-SA widzi w sumie połowę próbek. Alternatywa „same próbki widziane" wymagałaby 2× więcej iteracji dla PK-SA i mieszałaby budżet z efektem samplera. Decyzja udokumentowana w pracy.
 
 ### Konwencja nazewnicza eksperymentów
-`<faza>_<backbone>_<loss>_<sampler>_<aug>_<seed>` — np. `F3_EB2_MS_PK-SA_AUG-MED_s42`. Każdy przebieg → katalog z configiem (Hydra/OmegaConf), logami CSV/TensorBoard i checkpointem best-mAP.
+`<seria i faza>_<to, co w tej fazie się zmienia>` — np. `G1_PK_SA_BH`, `G2_CIRCLE`, `G3_AUG_MED`, `G4_EB1`. Seria F (maj 2026) ma prefiks `F`, seria G — `G`; ta sama nazwa nigdy nie jest używana dwa razy. Każdy przebieg → katalog `outputs/runs/<nazwa>/` z configiem Hydry, logiem, checkpointem best-mAP i embeddingami zbioru walidacyjnego; pełne krzywe w W&B (tag `series-g`).
 
 ---
 
@@ -204,7 +225,7 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 4. **Singletony — bez explicit'nego filtra na katalogu**. Para `(action, uid)` z 1 próbką nie generuje pozytywnej pary, więc dla strat metric jest „bezużyteczna jako anchor". Ale **PK-style samplery (PK, PK-SA, SEMI, XBM) wybierają tylko klasy z ≥K próbek — singletony są naturalnie pomijane na poziomie batcha** bez ruszania katalogu. Dla strat klasyfikacyjnych (`CE`, `ArcFace`) singletony są w pełni użyteczne (każda osoba dostaje jeden gradient na FC; tak działa rozpoznawanie twarzy na MS-Celeb-1M / ArcFace). Wniosek: trzymamy pełen katalog (po filtrze klas), każdy sampler/strata używa go zgodnie ze swoją naturą. Liczby do raportu: 138 861 par `(action, uid)` po filtrze klas; z tego 76 147 (54.8%) singletonów (=trafia tylko do losowego samplera) i 62 714 par ≥2-próbkowych (=trafia też do PK-samplerów). To dataset-specyficzny rozkład udokumentowany w pracy (kontrast z Market-1501, gdzie ID mają 15–30 zdjęć).
 5. **Sampler `PKPerActionBatchSampler`**: w każdym batchu wybiera 1 akcję, z niej P tożsamości × K próbek (próg odcięcia: ID musi mieć ≥K próbek w tej akcji). Wariant `PK` wybiera ID cross-action z tym samym progiem.
 6. **Resize do 256×128 bez zachowania proporcji** — zwykłe skalowanie (`v2.Resize((256, 128))`), identyczne w treningu i ewaluacji; standardowa praktyka w ReID (BoT-ReID, torchreid, fast-reid). Zniekształcenie proporcji jest niepomijalne: mediana 25%, ok. 21% wycinków > 50%, ok. 6% > 100% (rozkład praktycznie identyczny w train i valid). Wariant z paddingiem zachowującym proporcje (letterbox) **nie jest zaimplementowany** — kandydat na mini-ablację. Kompromis: padding usuwa zniekształcenie, ale część i tak małej rozdzielczości (mediana wycinka 123×59 px) zajmują puste pasy.
-7. **Augmentacje** — moduł z 4 presetami przełączanymi z configu (Albumentations lub torchvision v2).
+7. **Augmentacje** — moduł z 4 presetami przełączanymi z configu (torchvision v2, `src/soccernet_reid/transforms.py`).
 
 ---
 
@@ -218,11 +239,12 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
   - `classifier_cut` — głowa klasyfikacyjna na czas treningu, odcinana w inferencji (Wariant K §7.3, F0b).
 - **Optymalizator**: Adam(lr=3.5e-4), cosine schedule z warmup 5 epok. Weight decay: 0 w serii G, 5e-4 w serii F (zob. §0).
 - **Definicja epoki**: przy samplerach PK-style jeden batch nie odpowiada „przeglądowi datasetu". Przyjmujemy **epoka = 5000 iteracji** (≈ jeden przegląd 225 k próbek dla batcha 32; PK-SA z batch 16 widzi w sumie połowę próbek na epokę — patrz uwaga w §3 o porównywalności samplerów).
-- **Epoki**: 60 (plateau na podobnych re-id setupach ok. 40–50). W Fazach 1–3 można skrócić do 40 epok i tylko najlepsze konfiguracje przedłużyć do 60.
-- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Dostępna pamięć GPU: **RTX 3080 Laptop = 16 GB VRAM** (zweryfikowane przez `nvidia-smi`), wszystkie backbone'y z planu (R18..VGG16-BN) mieszczą się w batch=32 + AMP bez kompromisów — cloud nie jest konieczny dla Faz 1-5. Wyjątek: EB2 wymaga AMP=false (patrz §2.A footnote).
-- **Mixed precision (AMP)** — przyspiesza ~2×.
-- **Seedy**: 3 seedy per kluczowy przebieg w Fazach 3/4/5 → raportujemy średnią ± odch. std. Faza 1/2: 1 seed.
-- **Logowanie**: TensorBoard + CSV (loss, lr, valid mAP/R-1 co N epok); checkpoint best-mAP; pełna konfiguracja (Hydra) zapisana w katalogu eksperymentu.
+- **Epoki**: 40 w Fazach 1–4, 60 w Fazie 0 i w Fazie 5.
+- **Batch**: domyślnie **P=16/K=2 = 32** (samplery cross-action: PK, RAND, SEMI, XBM); **P=8/K=2 = 16** dla PK-SA (constraint datasetu: tylko 5% akcji ma 16 ID z ≥2 próbkami; 39% akcji ma 8 ID z ≥2 próbkami). Jeden przebieg zajmuje ok. 2 GB pamięci karty.
+- **Precyzja obliczeń**: pełna (FP32) we wszystkich przebiegach; mixed precision (AMP) wyłączone (§0).
+- **Ziarna**: jedno ziarno (0) dla każdej konfiguracji. Różnice poniżej ok. 1 pp mAP nie są więc rozstrzygające — ograniczenie do zapisania w pracy.
+- **Ewaluacja w trakcie treningu**: na zbiorze walidacyjnym co 5 epok; zapisywany jest checkpoint o najwyższym mAP.
+- **Logowanie** (W&B + katalog przebiegu): strata i lr w każdym kroku; co 250 kroków stan sieci (odsetek niezerowych wag, rozrzut embeddingów w batchu, udział trudnych trójek, norma gradientu straty); mAP / Rank-1/5/10 co 5 epok; checkpoint best-mAP; embeddingi zbioru walidacyjnego dla najlepszego checkpointu; pełna konfiguracja Hydry i commit kodu.
 - **Stack**: PyTorch + `pytorch-metric-learning` (gotowe MS/Triplet/Circle/ArcFace + miners + XBM) + `timm` (backbone'y) + Hydra/OmegaConf.
 
 ---
@@ -235,13 +257,17 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
    - policz cosine similarity (lub euclidean — patrz ablacja §7.1),
    - wyznacz AP i pozycję pierwszego trafienia.
 3. Uśrednij mAP, R-1, R-5, R-10 po wszystkich query.
-4. **Walidacja narzędzia**: nasz evaluator musi dać identyczny wynik co `tools/evaluate_soccernetv3_reid.py` z repo `sn-reid` (smoke test w Fazie 0).
-5. **`test/`** — używamy raz, na finalnych konfiguracjach z Faz 4/5. Nie używamy testu do tuningu.
-6. **`challenge/`** — opcjonalnie jeden submission na koniec pracy (ground-truth ukryte, wynik tylko z leaderboardu). Nie używamy challenge do żadnej walidacji w trakcie pracy.
+4. **Walidacja narzędzia**: nasz evaluator daje identyczny wynik co oficjalny `SoccerNet.Evaluation.ReIdentification.evaluate` (testy jednostkowe + `scripts/smoke_eval.py`, Faza 0).
+5. **`test/`** — używamy raz, na końcu serii G, dla konfiguracji końcowych. Nie używamy testu do żadnego wyboru.
+6. **`challenge/`** — nie używamy. Zbiór nie ma etykiet, a serwer konkursowy (EvalAI) został zamknięty; organizatorzy potwierdzili, że do prac naukowych służy zbiór `test/`. Porównanie z leaderboardem 2023 jest więc orientacyjne (inny zbiór).
+7. **Re-ranking** — na końcu serii G, dla najlepszych konfiguracji: k-reciprocal, normalizacja po zapytaniach akcji oraz ich połączenie (`scripts/eval_rerank.py`). Parametry dobierane wyłącznie na `valid/`, potem zamrożone i zastosowane raz na `test/`.
+8. **Finalne liczby** liczymy na jednej maszynie: skalowanie obrazu daje na różnych procesorach wynik różniący się o jeden poziom jasności w części pikseli, co zmienia mAP o ok. 0.0003.
 
 ---
 
 ## 7. Ablacje uzupełniające (do dyskusji w pracy)
+
+> Stan: żadna z ablacji nie została uruchomiona i nie są one częścią serii G. Które wykonać, zdecydujemy po osi 5. Punkt 1 wymaga przeprojektowania przed uruchomieniem: biblioteka normalizuje embeddingi wewnątrz strat, a dla znormalizowanych wektorów ranking cosinusowy i euklidesowy są identyczne. Punkt 6 (re-ranking) jest już zaimplementowany i wchodzi do zakończenia serii G (§6.7).
 
 1. **L2-normalizacja embeddingu**: porównanie 3 wariantów głowy × 2 metryki dystansu = **6 konfiguracji** (na 1 najlepszym backbonie + stracie):
    - **Warianty głowy**: (a) `FC → BN → L2` [pełna], (b) `FC → BN` [bez L2], (c) `FC` [bez BN, bez L2].
@@ -276,13 +302,15 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 
 1. **Tabela A** — wpływ samplera (Faza 1).
 2. **Tabela B** — wpływ funkcji straty (Faza 2).
-3. **Tabela C** — wpływ backbone'u (Faza 3), z liczbą parametrów i czasem treningu/inferencji.
-4. **Tabela D** — wpływ augmentacji (Faza 4) + krzywa uczenia.
+3. **Tabela C** — wpływ augmentacji (Faza 3) + krzywa uczenia.
+4. **Tabela D** — wpływ backbone'u (Faza 4), z liczbą parametrów i czasem treningu/inferencji (mierzonym osobno, §3).
 5. **Tabela E** — interakcje (Faza 5).
 6. **Krzywe CMC** dla top-3 konfiguracji.
-7. **Wizualizacje**: t-SNE / UMAP embeddingów dla 1 akcji; przykłady top-k trafień i porażek (failure analysis: ten sam strój, podobna sylwetka, occlusion, zawodnik częściowo poza kadrem).
+7. **Wizualizacje**: t-SNE / UMAP embeddingów dla 1 akcji; wyniki wyszukiwania dla najlepszych konfiguracji — zapytanie i najbliższe wycinki z galerii z oznaczeniem trafień, błędów i odległości (`scripts/visualize_retrieval.py`; failure analysis: ten sam strój, podobna sylwetka, occlusion, zawodnik częściowo poza kadrem).
 8. **Ablacje** z §7 w jednej sekcji.
-9. **Tabela porównawcza z leaderboardem 2023** — uczciwe pozycjonowanie pracy względem SOTA.
+9. **Tabela porównawcza z leaderboardem 2023** — uczciwe pozycjonowanie pracy względem SOTA, z zastrzeżeniem, że leaderboard liczono na zbiorze `challenge/`, a nasze wyniki na `valid/` i `test/`.
+10. **Re-ranking** dla najlepszych konfiguracji na `valid/` i `test/` (§6.7).
+11. **Diagnoza collapse'u z serii F**: wpływ weight decay w Adamie na odsetek niezerowych wag (przebiegi `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0`).
 
 ---
 
@@ -296,18 +324,22 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 | Niezgodność filtra treningowego z pełną ewaluacją | Niezgodność dotyczy tylko galerii: zapytania to wyłącznie zawodnicy i bramkarze (zweryfikowane, §4.3), a sędziowie i staff występują jedynie jako dystraktory w galerii (klasy niewidziane w treningu) — udokumentowane, ewentualna mini-ablacja z pełnym treningiem |
 | Niewłaściwa konfiguracja P×K dla tego datasetu | Liczby zweryfikowane na realnych danych: P=16/K=2 dla cross-action, P=8/K=2 dla PK-SA. K=4 wycina 90% datasetu — NIE używać. |
 | Mylenie „filtra singletonów" z naturalnym pomijaniem ich przez PK sampler | NIE filtrujemy katalogu. PK samplery same omijają singletony przez wymóg ≥K próbek per ID. Klasyfikatory (CE/ArcFace) używają singletonów produktywnie. Zgodne z literaturą ReID i face recognition. |
-| Niereprodukowalność | Seedy, deterministyczne cuDNN, konfigi Hydra zapisane w katalogu eksperymentu |
+| Niereprodukowalność | Ziarno, konfiguracja Hydry i commit kodu zapisane dla każdego przebiegu. cuDNN działa w trybie niedeterministycznym, więc powtórzenie przebiegu nie jest identyczne co do bitu |
+| Ciche „umieranie" sieci (wagi ściągane do zera, zerowe embeddingi) | Weight decay 0 (§0); odsetek niezerowych wag i rozrzut embeddingów logowane w każdym przebiegu i sprawdzane przy przeglądzie każdej osi |
+| Wnioski z jednego ziarna | Różnic poniżej ok. 1 pp nie interpretujemy jako przewagi |
 | Niezgodność z oficjalnym evalem | Smoke test (§6.4) przed Fazą 1 |
-| Nadmierne dopasowanie do test-setu | `test/` używamy tylko raz, na finalnych konfiguracjach z Faz 4/5 |
+| Nadmierne dopasowanie do test-setu | `test/` używamy tylko raz, na końcu serii G; parametry re-rankingu dobierane wyłącznie na `valid/` |
 | Konstruowanie własnego query/gallery | NIE — używamy oficjalnego podziału z `valid/{query,gallery}` i `test/{query,gallery}` |
 
 ---
 
-## 10. Następne kroki implementacyjne
+## 10. Następne kroki
 
-1. **Loader `bbox_info.json` + DataFrame z indeksem** + sanity check parser nazwy pliku (½ dnia).
-2. **Evaluator zgodny z oficjalnym** + smoke test (1 dzień).
-3. **Sampler PK-per-action + Dataset + augmentacje** (1 dzień).
-4. **Pętla treningowa z konfiguracją Hydra**, integracja `pytorch-metric-learning` i `timm`, wymienialna głowa (1–2 dni).
-5. **Faza 0** — sanity check + Wariant K.
-6. Dalsze fazy zgodnie z §3.
+Implementacja (loader, evaluator zgodny z oficjalnym, samplery, augmentacje, pętla treningowa, re-ranking, wizualizacja wyszukiwania) jest gotowa. Pozostało, w tej kolejności:
+
+1. **Seria G, fazy 0–4** (§3). Po każdej fazie przegląd wyników i decyzja o konfiguracji następnej.
+2. **Faza 5** — zaprojektowanie składu po fazach 1–4, potem przebiegi (60 epok).
+3. **Ocena konfiguracji końcowych na `test/`** — raz.
+4. **Re-ranking** dla najlepszych konfiguracji na `valid/` i `test/`.
+5. **Materiały do pracy**: tabele A–E, krzywe uczenia i CMC, wizualizacje wyszukiwania, pomiar szybkości sieci.
+6. **Ablacje §7** — decyzja, które wykonać.
