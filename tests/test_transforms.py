@@ -87,6 +87,20 @@ class TestDeterminism:
         for level in ("eval", "aug-min"):
             assert not any(isinstance(t, v2.RandomErasing) for t in build_transform(level).transforms)
 
+    def test_aug_strong_blurs_half_of_the_images(self) -> None:
+        """Blur is a random operation (p=0.5), not applied to every training image."""
+        from torchvision.transforms import v2
+
+        steps = build_transform("aug-strong").transforms
+        assert not any(isinstance(t, v2.GaussianBlur) for t in steps)      # never unconditional
+        wrappers = [t for t in steps if isinstance(t, v2.RandomApply)
+                    and any(isinstance(inner, v2.GaussianBlur) for inner in t.transforms)]
+        assert len(wrappers) == 1 and wrappers[0].p == 0.5
+        blur = wrappers[0].transforms[0]
+        assert tuple(blur.kernel_size) == (3, 3) and tuple(blur.sigma) == (0.1, 2.0)
+        for level in ("eval", "aug-min", "aug-med", "aug-bot"):
+            assert not any(isinstance(t, (v2.GaussianBlur, v2.RandomApply)) for t in build_transform(level).transforms)
+
     @pytest.mark.parametrize("level", ["aug-med", "aug-strong", "aug-bot"])
     def test_strong_augmentations_vary(self, level: str) -> None:
         tx = build_transform(level, height=256, width=128)

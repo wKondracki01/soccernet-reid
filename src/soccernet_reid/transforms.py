@@ -4,7 +4,10 @@ Presets:
     "eval"       — no augmentation, just resize + normalize. Used for valid/test.
     "aug-min"    — eval + horizontal flip. The weakest training transform.
     "aug-med"    — aug-min + ColorJitter + RandomCrop with padding + Random Erasing.
-    "aug-strong" — aug-med + RandAugment + GaussianBlur + RandomPerspective.
+    "aug-strong" — aug-med + RandAugment + GaussianBlur (p=0.5) + RandomPerspective (p=0.3).
+                   Until October 2026 the blur was applied to every image; it is
+                   now random like the other operations, so that training does not
+                   see only blurred crops while evaluation sees none.
     "aug-bot"   — ReID-aware "strong": aug-med features + RandomGrayscale + stronger
                    ColorJitter. No RandAugment/Perspective/Blur. Recipe follows
                    BoT-ReID (Luo 2019) / MGN (Wang 2018).
@@ -107,7 +110,7 @@ def build_transform(
                 v2.RandomCrop((height, width)),
                 # RandAugment / AutoAugment expect uint8 tensors -> still pre-postamble.
                 v2.RandAugment(num_ops=2, magnitude=9),
-                v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+                v2.RandomApply([v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=0.5),
                 v2.RandomPerspective(distortion_scale=0.2, p=0.3),
                 *postamble,
                 v2.RandomErasing(**RANDOM_ERASING),

@@ -21,6 +21,9 @@ Wszystkie przebiegi z maja 2026 (nazwy `F0`–`F5`) zostały powtórzone jako se
 | Strata Circle | z minerem batch-hard (1 pozytyw i 1 negatyw na kotwicę) | wszystkie pary w batchu, bez minera | tak zdefiniowano ją w pracy źródłowej (Sun i in., 2020); miner usuwał ważenie par, które jest istotą tej straty |
 | Random Erasing | AUG-MED: 2–33% pola; AUG-STRONG / AUG-BOT: 2–40% | 2–40% we wszystkich | zestawy mają się różnić tylko wymienionymi operacjami |
 | Ewaluacja na valid | co 10 epok | co 5 epok | gęstsze krzywe uczenia do wykresów |
+| Rozmycie w AUG-STRONG | każdy obraz (p = 1) | losowo, p = 0,5 | pozostałe operacje zestawu są losowe; przy p = 1 trening widział wyłącznie rozmyte wycinki, a ewaluacja żadnych |
+| Kolejność osi | 1 dobór przykładów → 2 strata → 3 backbone → 4 augmentacje | 1 dobór przykładów → 2 strata → **3 augmentacje (na R18) → 4 backbone (z wybraną augmentacją)** | porównanie sieci przy samym odbiciu poziomym sprzyja małym sieciom; w serii F ranking backbone'ów zmienił się po przejściu na AUG-MED |
+| Oś 1 — warianty | RAND, PK-BH, PK-SH, PK-SA-BH, PK-BH-XBM | te same + PK-SA-SH i PK-SA-BH-XBM | semi-hard i XBM były sprawdzone tylko z samplerem PK |
 
 Wnioski serii F o collapse'ie AUG-STRONG / AUG-BOT (niżej w tym dokumencie) dotyczą starego optymalizatora i nie opisują własności augmentacji. Opisy poniżej zostają jako zapis stanu z maja 2026.
 
