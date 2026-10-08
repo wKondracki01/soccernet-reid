@@ -8,9 +8,11 @@ Presets:
                    Until October 2026 the blur was applied to every image; it is
                    now random like the other operations, so that training does not
                    see only blurred crops while evaluation sees none.
-    "aug-bot"   — ReID-aware "strong": aug-med features + RandomGrayscale + stronger
-                   ColorJitter. No RandAugment/Perspective/Blur. Recipe follows
-                   BoT-ReID (Luo 2019) / MGN (Wang 2018).
+    "aug-bot"   — colour-oriented variant: aug-med with a stronger ColorJitter and
+                   RandomGrayscale. No RandAugment/Perspective/Blur. The name is
+                   historical and misleading: the augmentation of BoT-ReID (Luo
+                   2019) is flip + pad-and-crop + Random Erasing, with no colour
+                   jitter and no grayscale, i.e. aug-med without its ColorJitter.
 
 Random Erasing is the same in all three (``RANDOM_ERASING``: p=0.5, 2-40% of the
 area, aspect ratio 0.3-3.3 — the defaults of Zhong et al. and of BoT-ReID), so
@@ -118,8 +120,8 @@ def build_transform(
         )
 
     # level == "aug-bot"
-    # ReID-aware "strong": no RandAugment/Perspective/Blur. Adds RandomGrayscale
-    # (BoT-ReID/MGN canonical) and a stronger ColorJitter.
+    # Colour-oriented variant of aug-med: stronger ColorJitter plus RandomGrayscale,
+    # no RandAugment/Perspective/Blur. Not the BoT-ReID recipe (see module docstring).
     return v2.Compose(
         [
             *preamble,
