@@ -191,7 +191,32 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 > W serii F kolejność była odwrotna (backbone'y przy AUG-MIN, potem augmentacje na `B*`). Zmiana: porównanie sieci przy samym odbiciu poziomym sprzyja małym sieciom (§0).
 
 ### Faza 5 — interakcje
-> **Seria G: skład osi 5 nie jest ustalony.** Zostanie zaprojektowany po zakończeniu i przeglądzie osi 1–4, bo zwycięzcy osi mogą być inni niż w serii F. Poniższy opis to zapis historyczny serii F; jego uzasadnienia odwołują się do wyników ze starym optymalizatorem.
+#### Seria G — skład ustalony 8.10.2026 (uruchomiony tego samego dnia)
+
+Oś 5 ma trzy zadania: (1) potwierdzić na konfiguracji końcowej dwa największe wnioski, które mierzono tylko na `R18` z `AUG-MIN` — rolę samplera i przewagę strat metrycznych nad klasyfikacją; (2) rozstrzygnąć trzy remisy, na których opierały się wybory w osiach 1–3 (strata, XBM, augmentacja); (3) dać wynik końcowy.
+
+**Baza**: `R34 + TRI (batch-hard) + PK-SA + AUG-MED`, 60 epok. Każdy przebieg zmienia **jeden** element bazy.
+
+| ID | Zmiana względem bazy | Pytanie |
+|---|---|---|
+| `G5_REF` | brak | Czy 60 epok poprawia wynik `R34` po 40 epokach? |
+| `G5_REF_S1`, `G5_REF_S2` | ziarno 1 i 2 | Jaki jest rozrzut między treningami tej samej konfiguracji? |
+| `G5_MS` | strata `MS` (λ=0.5) | Czy `MS`, równa `TRI` przy `AUG-MIN`, wygra z augmentacją i większą siecią? |
+| `G5_CIRCLE` | strata `CIRCLE` (m=0.4, γ=80) | To samo dla `CIRCLE`. |
+| `G5_XBM` | dodany XBM | Czy pamięć, równorzędna w osi 1, pomaga konfiguracji końcowej? |
+| `G5_STRONG` | `AUG-STRONG` | Czy `AUG-STRONG`, równa `AUG-MED` na `R18`, wygra przy dłuższym treningu? |
+| `G5_PK` | sampler `PK` (16×2) | Czy przewaga `PK-SA` z osi 1 utrzymuje się w konfiguracji końcowej? |
+| `G5_ARC_WD` | strata `ARC` z weight decay 5·10⁻⁴, sampler losowy | Czy przewaga strat metrycznych nad klasyfikacją utrzymuje się z augmentacją i większą siecią? |
+
+**Trzy ziarna bazy** (odstępstwo od zasady „jedno ziarno” z §0, uzgodnione 8.10.2026): cztery przebiegi porównują warianty, które wcześniej były w remisie, więc spodziewane różnice są poniżej 1 pp, a żadna konfiguracja nie była dotąd powtarzana. Bez rozrzutu między ziarnami nie da się tych różnic odróżnić od szumu.
+
+**Reguła ustalona przed uruchomieniem**: wariant zastępuje bazę tylko wtedy, gdy jego mAP na zbiorze walidacyjnym jest wyższe niż najlepszy z trzech przebiegów bazy. W przeciwnym razie konfiguracją końcową zostaje baza.
+
+Rozważone i niewłączone: pełna siatka kombinacji 3 straty × 2 augmentacje × XBM (12 przebiegów; przy różnicach poniżej 1 pp i bez powtórzeń interakcje byłyby nieczytelne), `EB2` na 60 epok (krzywa stoi od 15. epoki), `PK` z XBM (oś 1 pokazała, że `PK-SA` wygrywa także z nim), hybryda CE + triplet (wymaga nowego kodu). Jeśli dwa warianty niezależnie pokonają bazę, możliwy jest jeden dodatkowy przebieg łączący oba.
+
+#### Seria F — zapis historyczny
+
+> Poniższy opis dotyczy serii F; jego uzasadnienia odwołują się do wyników ze starym optymalizatorem.
 
 Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 epok** (zamiast 40 z Faz 1-3) — finalna konfiguracja zasługuje na pełny budżet czasowy, a krzywa AUG-MED w Fazie 4 wciąż rosła w ep 40.
 
