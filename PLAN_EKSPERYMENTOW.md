@@ -145,6 +145,7 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 ### Faza 0 — sanity check i punkty odniesienia
 - **F0a**: konfiguracja referencyjna do końca, zapisany checkpoint.
 - **F0b**: **Wariant K (classifier baseline)** — `R18 + CE + losowy sampler` na wszystkich klasach `(action,uid)` z train po filtrze klas zawodniczych = **138 861 klas / 225 652 próbki** (singletony zostawione — klasyfikator z natury nie potrzebuje par, podobnie jak ArcFace na MS-Celeb-1M). Po treningu ucinamy głowę FC i używamy embeddingu. To drugi punkt odniesienia (klasyfikacja vs. metric learning, użyty potem w ablacji §7.3). Klasyfikator FC: 512 × 138 861 ≈ **71 M parametrów** samej głowy; logity per batch 32 w fp32 ≈ 17.6 MB.
+- **G0c** (seria G, 8.10.2026): Wariant K z weight decay 5·10⁻⁴ (`G0c_variant_K_WD`, 60 epok). Wersja bez weight decay (`G0b`) zapamiętuje zbiór treningowy i jej mAP spada od pierwszej ewaluacji, więc punkt odniesienia klasyfikacyjnego ma dwie wersje.
 - Walidacja narzędzia: nasz evaluator daje identyczny wynik co oficjalny `SoccerNet.Evaluation.ReIdentification.evaluate` — sprawdzane testami jednostkowymi na losowych rankingach oraz skryptem `scripts/smoke_eval.py` na cechach `R18-ImageNet` (różnica 0).
 - Wartości odniesienia bez treningu (valid): losowy ranking mAP 0.1942, stały wektor 0.2808, `R18-ImageNet` 0.3295.
 
@@ -169,12 +170,16 @@ Wspólny mianownik obu prac: **brak RandAugment, brak AutoAugment z ImageNet-pol
 >
 > **Ewaluacja**: w czterech przebiegach klasyfikacyjnych co epokę (`eval.every_n_epochs=1`), bo najlepszy wynik może wypadać przed 5. epoką; checkpoint trafia wtedy do W&B raz, na końcu (`wandb.upload_best=end`).
 >
+> **Uzupełnienie po przeglądzie (8.10.2026)**: przy wartościach z tabeli §2.B strat `CONT` (margines negatywów 0.5) i `MS` (λ=1) embeddingi zbioru walidacyjnego skupiają się w wąskim stożku (średni kosinus losowych par 0.85 i 0.93, wobec 0.02 dla `TRI`), a gradient `MS` zanika. Dlatego dochodzą dwa przebiegi z wartościami z oficjalnej implementacji / domyślnymi biblioteki: `G2_CONT_M1` (`loss.neg_margin=1.0`) i `G2_MS_B05` (`loss.base=0.5`). Idą równolegle z Fazą 3; jeśli któryś wyprzedzi `TRI`, Faza 3 zostanie powtórzona z nową stratą.
+>
+> `ARC` bez weight decay nie zbiega (wszystkie wagi klas ustawiają się równolegle), więc wierszem `ARC` jest wersja z weight decay.
+>
 > `ARC`: właściwy margines 0.5 rad (28.6°), bez wariantu z innym marginesem; w tabeli jeden wiersz. W serii F margines wynosił przez błąd jednostek 0.5°.
 >
 > **Doprecyzowanie głowy modelu**: Faza 2 używa domyślnej głowy `projection` (BN→FC→BN→L2-norm) dla strat metric (`CONT`, `TRI`, `MS`, `CIRCLE`) i dla `ARC` (ArcFace ma wewnętrzny scale=30 który neutralizuje saturację logitów). Wyjątek dla `CE`: musi używać głowy **`classifier_cut`** (raw features, bez L2-norm), ponieważ L2-norma na 138k-class CE classifierze powoduje saturację — logity skalują się do ~[-0.06, 0.06], softmax wychodzi praktycznie uniform, gradient zerowy, train loss zatrzymuje się na `ln(138852)≈11.84`. Empirycznie zweryfikowane (F2_CE v1 z projection head: train_loss stale 11.84 przez 40 epok, mAP=0.363). Z `classifier_cut`: normalna konwergencja. Same head jak w Wariancie K (F0b) z §7.3, ale F2_CE używa 40 epok dla spójności tabeli Fazy 2.
 
 ### Faza 3 — oś D (augmentacje)
-`R18 + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG, AUG-BOT}`, 40 epok. **4 wpisy** (AUG-MIN to zwycięzca osi 2; 3 nowe przebiegi, nazwy `G3_AUG_*`). → wybieramy `A*`, wykres „augmentacja vs. mAP".
+`R18 + S* + L* + {AUG-MIN, AUG-MED, AUG-STRONG, AUG-BOT}`, 40 epok. **4 wpisy** (AUG-MIN to zwycięzca osi 2; 3 nowe przebiegi, nazwy `G3_AUG_*`). Uruchomione 8.10.2026 z `L*` = `TRI` (najlepsza strata po Fazie 2: mAP wyższe od `CIRCLE` o 1,15 pp i jedyna krzywa, która nie spada po 10. epoce); wybór jest warunkowy do czasu zakończenia dwóch uzupełniających przebiegów Fazy 2. → wybieramy `A*`, wykres „augmentacja vs. mAP".
 
 ### Faza 4 — oś A (backbone)
 `{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN} + S* + L* + A*`, 40 epok. **6 wpisów** (R18 to zwycięzca osi 3; 5 nowych przebiegów, nazwy `G4_*`). → wybieramy `B*`.
