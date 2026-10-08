@@ -22,7 +22,33 @@ _TIMM_NAMES: dict[str, str] = {
     "EB2": "efficientnet_b2",
     "VGG11-BN": "vgg11_bn",
     "VGG16-BN": "vgg16_bn",
+    "VGG11-BN-CONV": "vgg11_bn",
+    "VGG16-BN-CONV": "vgg16_bn",
 }
+
+# VGG codes that stop after the convolutional layers (see _ConvOnlyVGG).
+_CONV_ONLY: frozenset[str] = frozenset({"VGG11-BN-CONV", "VGG16-BN-CONV"})
+
+
+class _ConvOnlyVGG(nn.Module):
+    """Convolutional part of a timm VGG followed by global average pooling.
+
+    timm's VGG with ``num_classes=0`` keeps its two fully connected layers (fc6
+    as a 7x7 convolution, and fc7: about 120 M parameters, the same in VGG11 and
+    VGG16) and returns a 4096-d vector. fc6 needs a map of at least 7x7, so for
+    our 256x128 crops timm first stretches the 8x4 feature map to 8x7. The codes
+    "VGG11-BN" / "VGG16-BN" are that model.
+
+    This wrapper drops both layers, so VGG is used the way the other backbones
+    are: last feature map -> average over positions -> 512-d vector.
+    """
+
+    def __init__(self, vgg: nn.Module) -> None:
+        super().__init__()
+        self.features = vgg.features
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.features(x).mean(dim=(2, 3))
 
 
 def create_backbone(
@@ -32,7 +58,8 @@ def create_backbone(
     """Build a feature-extractor backbone identified by our plan code.
 
     Args:
-        name: one of the codes from §2.A (e.g., "R18", "EB1", "VGG16-BN").
+        name: one of the codes from §2.A (e.g., "R18", "EB1", "VGG16-BN"), or a
+            "-CONV" VGG code for the convolutional layers alone.
         pretrained: load ImageNet weights.
 
     Returns:
@@ -49,6 +76,8 @@ def create_backbone(
         num_classes=0,         # remove classifier head
         global_pool="avg",     # GAP
     )
+    if name in _CONV_ONLY:
+        return _ConvOnlyVGG(model)
     return model
 
 

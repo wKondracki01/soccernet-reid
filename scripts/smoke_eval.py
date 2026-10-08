@@ -125,7 +125,7 @@ def main() -> int:
     parser.add_argument("--split", type=str, default="valid", choices=["valid", "test"],
                         help="Which split to evaluate")
     parser.add_argument("--backbone", type=str, default="R18",
-                        help="Backbone code (R18/R34/EB1/EB2/VGG11-BN/VGG16-BN)")
+                        help="Backbone code (R18/R34/EB1/EB2/VGG11-BN/VGG16-BN, or VGG11-BN-CONV/VGG16-BN-CONV)")
     parser.add_argument("--device", type=str, default="auto",
                         help="cuda / mps / cpu / auto")
     parser.add_argument("--batch-size", type=int, default=64)

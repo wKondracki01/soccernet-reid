@@ -1,0 +1,3 @@
+# VGG11-BN without its fully connected layers: conv features + global average pooling (512-d).
+name: VGG11-BN-CONV
+pretrained: true
