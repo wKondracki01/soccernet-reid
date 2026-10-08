@@ -168,6 +168,8 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 >
 > **Uzupełnienie po przeglądzie (8.10.2026)**: przy wartościach z tabeli §2.B strat `CONT` (margines negatywów 0.5) i `MS` (λ=1) embeddingi zbioru walidacyjnego skupiają się w wąskim stożku (średni kosinus losowych par 0.85 i 0.93, wobec 0.02 dla `TRI`), a gradient `MS` zanika. Dlatego dochodzą dwa przebiegi z wartościami z oficjalnej implementacji / domyślnymi biblioteki: `G2_CONT_M1` (`loss.neg_margin=1.0`) i `G2_MS_B05` (`loss.base=0.5`). Idą równolegle z Fazą 3; jeśli któryś wyprzedzi `TRI`, Faza 3 zostanie powtórzona z nową stratą.
 >
+> `CIRCLE` jest jedyną stratą metryczną niepoliczoną na wartościach z artykułu dla wariantu parowego (m=0.4, γ=80), więc równolegle z Fazą 4 idzie `G2_CIRCLE_M04` (`loss.m=0.4 loss.gamma=80`).
+>
 > `ARC` bez weight decay nie zbiega (wszystkie wagi klas ustawiają się równolegle), więc wierszem `ARC` jest wersja z weight decay.
 >
 > `ARC`: właściwy margines 0.5 rad (28.6°), bez wariantu z innym marginesem; w tabeli jeden wiersz. W serii F margines wynosił przez błąd jednostek 0.5°.
@@ -179,6 +181,10 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 
 ### Faza 4 — oś A (backbone)
 `{R18, R34, EB1, EB2, VGG11-BN, VGG16-BN} + S* + L* + A*`, 40 epok. **6 wpisów** (R18 to zwycięzca osi 3; 5 nowych przebiegów, nazwy `G4_*`). → wybieramy `B*`.
+
+> **Uruchomione 8.10.2026** z `L*` = `TRI` i `A*` = `AUG-MED`: `G4_R34`, `G4_EB1`, `G4_EB2`, `G4_VGG11_BN`, `G4_VGG16_BN`; wiersz `R18` to `G3_AUG_MED`. Checkpoint do W&B trafia raz, na końcu (`wandb.upload_best=end`) — checkpoint VGG ma ok. 1,6 GB.
+>
+> Wybory po Fazie 3 i uzupełnieniach Fazy 2: `AUG-MED` i `AUG-STRONG` dały wynik równorzędny (różnica mAP w granicach niepewności pomiaru), dalej idzie prostszy zestaw. `MS` z λ=0.5 zrównała się z `TRI`; `TRI` zostaje, bo uczy się szybciej i Faza 3 jest na niej policzona. Kandydaci do Fazy 5 zapisani przy przeglądach: `MS` (λ=0.5) z `AUG-MED`, XBM jako dodatek, `AUG-STRONG` przy 60 epokach.
 
 > W serii F kolejność była odwrotna (backbone'y przy AUG-MIN, potem augmentacje na `B*`). Zmiana: porównanie sieci przy samym odbiciu poziomym sprzyja małym sieciom (§0).
 
