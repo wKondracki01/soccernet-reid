@@ -184,6 +184,8 @@ Uzasadnienie: ReID szczególnie korzysta z **Random Erasing** (Zhong et al.). Ś
 
 > **Uruchomione 8.10.2026** z `L*` = `TRI` i `A*` = `AUG-MED`: `G4_R34`, `G4_EB1`, `G4_EB2`, `G4_VGG11_BN`, `G4_VGG16_BN`; wiersz `R18` to `G3_AUG_MED`. Checkpoint do W&B trafia raz, na końcu (`wandb.upload_best=end`) — checkpoint VGG ma ok. 1,6 GB.
 >
+> **Uzupełnienie (8.10.2026): VGG bez warstw w pełni połączonych.** Kody `VGG11-BN` / `VGG16-BN` to model timm z fc6 i fc7 (ok. 120 mln parametrów wspólnych dla obu sieci, cecha 4096, mapa cech rozciągana z 8×4 do 8×7), podczas gdy pozostałe backbone'y kończą się uśrednieniem ostatniej mapy cech. Dlatego dochodzą `G4_VGG11_BN_CONV` i `G4_VGG16_BN_CONV` (`backbone=vgg11_bn_conv` / `vgg16_bn_conv`): same warstwy konwolucyjne + global average pooling, cecha 512, 9,5 / 15,0 mln parametrów z głową. Reszta ustawień jak w pozostałych przebiegach Fazy 4.
+>
 > Wybory po Fazie 3 i uzupełnieniach Fazy 2: `AUG-MED` i `AUG-STRONG` dały wynik równorzędny (różnica mAP w granicach niepewności pomiaru), dalej idzie prostszy zestaw. `MS` z λ=0.5 zrównała się z `TRI`; `TRI` zostaje, bo uczy się szybciej i Faza 3 jest na niej policzona. Kandydaci do Fazy 5 zapisani przy przeglądach: `MS` (λ=0.5) z `AUG-MED`, XBM jako dodatek, `AUG-STRONG` przy 60 epokach.
 
 > W serii F kolejność była odwrotna (backbone'y przy AUG-MIN, potem augmentacje na `B*`). Zmiana: porównanie sieci przy samym odbiciu poziomym sprzyja małym sieciom (§0).
