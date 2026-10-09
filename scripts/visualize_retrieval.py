@@ -32,6 +32,7 @@ Usage
     random     a plain random sample of all queries
     successes  first correct crop at rank 1
     failures   first correct crop at rank 2 or later
+    differ     with --compare-with: exactly one of the two models is right at rank 1
 The sample is drawn with ``--seed``, so a figure can be regenerated, and
 ``mixed`` / ``random`` avoid picking examples by hand.
 """
@@ -139,6 +140,19 @@ def pick_queries(ranked: list[dict], bbox_ids: list[int]) -> list[dict]:
     return [by_id[b] for b in bbox_ids]
 
 
+def select_differing(ranked: list[dict], other: list[dict], n: int, seed: int) -> list[dict]:
+    """Seeded sample of queries that exactly one of the two models answers correctly at rank 1.
+
+    Rows come from ``ranked`` (the first model). Both directions are in the pool,
+    so the sample also shows queries the first model gets wrong and the second right.
+    """
+    other_ok = {r["bbox_idx"]: r["first_correct"] == 1 for r in other}
+    pool = [r for r in ranked if (r["first_correct"] == 1) != other_ok[r["bbox_idx"]]]
+    rng = np.random.default_rng(seed)
+    k = min(n, len(pool))
+    return [pool[i] for i in sorted(rng.choice(len(pool), size=k, replace=False))] if k else []
+
+
 def pair_rows(rows: list[dict], other: list[dict], labels: tuple[str, str]) -> list[dict]:
     """Interleave ``rows`` with the same queries ranked by a second model.
 
@@ -213,7 +227,8 @@ def main() -> int:
     parser.add_argument("--catalog", type=Path, default=PROJECT_ROOT / "outputs" / "catalog.parquet")
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--num-queries", type=int, default=6)
-    parser.add_argument("--select", default="mixed", choices=("mixed", "random", "successes", "failures"))
+    parser.add_argument("--select", default="mixed",
+                        choices=("mixed", "random", "successes", "failures", "differ"))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--title", default=None)
     parser.add_argument("--queries", type=int, nargs="+", default=None,
@@ -233,19 +248,32 @@ def main() -> int:
     split = str(emb["split"])
     catalog = load_catalog(args.catalog)
     ranked = rank_queries(emb, catalog, split)
+    ranked_other = None
+    if args.compare_with is not None:
+        other = load(args.compare_with)
+        if str(other["split"]) != split:
+            raise SystemExit(f"--compare-with is for split {str(other['split'])!r}, expected {split!r}")
+        ranked_other = rank_queries(other, catalog, split)
     if args.queries:
         rows, how = pick_queries(ranked, args.queries), "given list"
+    elif args.select == "differ":
+        if ranked_other is None:
+            raise SystemExit("--select differ needs --compare-with")
+        rows = select_differing(ranked, ranked_other, args.num_queries, args.seed)
+        other_ok = {r["bbox_idx"]: r["first_correct"] == 1 for r in ranked_other}
+        first_only = sum(1 for r in ranked if r["first_correct"] == 1 and not other_ok[r["bbox_idx"]])
+        second_only = sum(1 for r in ranked if r["first_correct"] != 1 and other_ok[r["bbox_idx"]])
+        print(f"rank-1 correct only for {args.labels[0]}: {first_only:,} queries; "
+              f"only for {args.labels[1]}: {second_only:,}")
+        how = f"differ, seed {args.seed}"
     else:
         rows = select_queries(ranked, args.select, args.num_queries, args.seed)
         how = f"{args.select}, seed {args.seed}"
     rank1 = np.mean([r["first_correct"] == 1 for r in ranked])
     print(f"{split}: {len(ranked):,} queries, mAP {np.mean([r['ap'] for r in ranked]):.4f}, rank-1 {rank1:.4f}")
     print(f"drawing {len(rows)} queries ({how}): bbox_idx {[r['bbox_idx'] for r in rows]}")
-    if args.compare_with is not None:
-        other = load(args.compare_with)
-        if str(other["split"]) != split:
-            raise SystemExit(f"--compare-with is for split {str(other['split'])!r}, expected {split!r}")
-        rows = pair_rows(rows, rank_queries(other, catalog, split), tuple(args.labels))
+    if ranked_other is not None:
+        rows = pair_rows(rows, ranked_other, tuple(args.labels))
     draw_figure(rows, args.top_k, args.out, args.title, lang=args.lang)
     print(f"wrote {args.out}")
     return 0

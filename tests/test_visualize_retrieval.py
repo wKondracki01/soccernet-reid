@@ -142,3 +142,18 @@ def test_pair_rows_puts_the_second_model_under_each_query(toy, tmp_path) -> None
     out = tmp_path / "pair.png"
     script.draw_figure(rows, top_k=3, out_path=out, title=None, lang="pl")
     assert out.stat().st_size > 0
+
+
+
+def test_select_differing_takes_queries_where_one_model_is_right(toy) -> None:
+    script = _load_script()
+    emb, catalog = toy
+    ranked = script.rank_queries(emb, catalog, "valid")
+    # a second model that agrees on query 1 and flips the outcome of queries 0 and 2
+    other = [dict(r) for r in ranked]
+    for r in other:
+        if r["bbox_idx"] in (0, 2):
+            r["first_correct"] = 1 if r["first_correct"] != 1 else 2
+    picked = script.select_differing(ranked, other, 5, seed=0)
+    assert sorted(r["bbox_idx"] for r in picked) == [0, 2]
+    assert script.select_differing(ranked, ranked, 5, seed=0) == []
