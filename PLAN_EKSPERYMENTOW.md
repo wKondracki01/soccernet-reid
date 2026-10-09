@@ -322,6 +322,12 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 > | 7 | Krzywa zbieżności | pełne — mAP co 5 epok w każdym przebiegu; `G0a` (60 epok) i `G1_PK_BH` (40 epok) to ta sama konfiguracja | — |
 > | 8 | K w samplerze | brak | 2 przebiegi |
 >
+> **Decyzja z 9.10.2026 (po osi 5).** Konfiguracją końcową jest `R34 + TRI + PK-SA + AUG-STRONG`, 60 epok (jedyny wariant osi 5 powyżej najlepszego ziarna bazy); dostaje dwa dodatkowe ziarna (`G5_STRONG_S1`, `G5_STRONG_S2`). Z listy ablacji uruchomiono dwie, obie na konfiguracji końcowej (grupa `G6`):
+> - **#2 wymiar embeddingu**: `G6_D64`, `G6_D128`, `G6_D256`, `G6_D1024` (`embedding_dim=…`); punkt D=512 to konfiguracja końcowa.
+> - **#4 pretraining**: `G6_SCRATCH` (`backbone.pretrained=false`).
+>
+> Nie będą liczone: #1 (źle postawiona — straty normalizują embeddingi), #3 w części „Wariant K na konfiguracji końcowej” i „Wariant H” (przebieg `G5_ARC_WD` pokazał, że klasyfikacja z weight decay na konfiguracji końcowej traci 97,6% wag; hybryda wymagałaby nowego kodu i wraca w niej ten sam problem), #8 (tylko 10% klas ma co najmniej trzy wycinki i 7% akcji ma osiem takich klas, więc porównanie mierzyłoby głównie mniejszy zbiór). #5 (GeM) pozostaje nieuruchomiona. Zbiór testowy: oceniana jest wyłącznie konfiguracja końcowa (trzy ziarna), z re-rankingiem strojonym na zbiorze walidacyjnym.
+>
 > Poza listą: wpływ weight decay na stan sieci zbadano parą przebiegów `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0` (§0) — to notatka robocza, w pracy nieopisywana.
 
 1. **L2-normalizacja embeddingu**: porównanie 3 wariantów głowy × 2 metryki dystansu = **6 konfiguracji** (na 1 najlepszym backbonie + stracie):
