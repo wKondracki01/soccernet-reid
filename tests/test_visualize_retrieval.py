@@ -108,3 +108,37 @@ def test_draw_figure_writes_an_image(toy, tmp_path) -> None:
     out = tmp_path / "fig.png"
     script.draw_figure(ranked, top_k=3, out_path=out, title="toy")   # action 1 has only 2 gallery crops
     assert out.stat().st_size > 1000
+
+
+def test_pick_queries_keeps_the_given_order(toy) -> None:
+    script = _load_script()
+    emb, catalog = toy
+    ranked = script.rank_queries(emb, catalog, "valid")
+    assert [r["bbox_idx"] for r in script.pick_queries(ranked, [2, 0])] == [2, 0]
+    with pytest.raises(ValueError, match="No such query"):
+        script.pick_queries(ranked, [0, 999])
+
+
+def test_pair_rows_puts_the_second_model_under_each_query(toy, tmp_path) -> None:
+    pytest.importorskip("matplotlib")
+    from PIL import Image
+
+    script = _load_script()
+    emb, catalog = toy
+    for p in catalog["path"]:
+        f = tmp_path / Path(p).name
+        Image.fromarray(np.random.default_rng(0).integers(0, 255, size=(60, 30, 3), dtype=np.uint8)).save(f)
+    catalog = catalog.assign(path=[str(tmp_path / Path(p).name) for p in catalog["path"]])
+    ranked = script.rank_queries(emb, catalog, "valid")
+    other = dict(emb)
+    other["gallery_feats"] = emb["gallery_feats"][::-1].copy()   # a different model: other rankings
+    ranked_other = script.rank_queries(other, catalog, "valid")
+
+    rows = script.pair_rows(ranked[:2], ranked_other, ("final", "baseline"))
+
+    assert [r["label"] for r in rows] == ["final", "baseline", "final", "baseline"]
+    assert [r["bbox_idx"] for r in rows] == [ranked[0]["bbox_idx"]] * 2 + [ranked[1]["bbox_idx"]] * 2
+    assert rows[1]["gallery"] == {r["bbox_idx"]: r for r in ranked_other}[ranked[0]["bbox_idx"]]["gallery"]
+    out = tmp_path / "pair.png"
+    script.draw_figure(rows, top_k=3, out_path=out, title=None, lang="pl")
+    assert out.stat().st_size > 0

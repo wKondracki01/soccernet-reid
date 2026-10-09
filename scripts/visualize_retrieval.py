@@ -20,6 +20,13 @@ Usage
     python scripts/visualize_retrieval.py EMB.npz --out fig.pdf --select failures \\
         --num-queries 8 --seed 1
 
+    # the same queries for two models, one row each (labels in Polish)
+    python scripts/visualize_retrieval.py FINAL.npz --compare-with BASELINE.npz \\
+        --labels "final" "baseline" --select random --lang pl --out fig.pdf
+
+    # a fixed list of queries (bbox_idx values, e.g. the ones printed by an earlier call)
+    python scripts/visualize_retrieval.py EMB.npz --queries 120 4711 9000 --out fig.png
+
 ``--select``:
     mixed      half queries answered correctly at rank 1, half not (default)
     random     a plain random sample of all queries
@@ -45,6 +52,12 @@ from soccernet_reid.eval.ranking import compute_rankings  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GREEN, RED, BLUE = "#1a9641", "#d7191c", "#2b6cb0"
+
+# Text drawn on the figure, per language.
+_TEXT: dict[str, dict[str, str]] = {
+    "en": {"query": "query", "first": "first correct"},
+    "pl": {"query": "zapytanie", "first": "pierwsze trafienie"},
+}
 
 
 def rank_queries(emb: dict, catalog, split: str) -> list[dict]:
@@ -117,7 +130,33 @@ def select_queries(ranked: list[dict], mode: str, n: int, seed: int) -> list[dic
     raise ValueError(f"Unknown selection mode {mode!r}")
 
 
-def draw_figure(rows: list[dict], top_k: int, out_path: Path, title: str | None) -> None:
+def pick_queries(ranked: list[dict], bbox_ids: list[int]) -> list[dict]:
+    """The queries with the given ``bbox_idx``, in the given order."""
+    by_id = {r["bbox_idx"]: r for r in ranked}
+    missing = [b for b in bbox_ids if b not in by_id]
+    if missing:
+        raise ValueError(f"No such query bbox_idx in this split: {missing}")
+    return [by_id[b] for b in bbox_ids]
+
+
+def pair_rows(rows: list[dict], other: list[dict], labels: tuple[str, str]) -> list[dict]:
+    """Interleave ``rows`` with the same queries ranked by a second model.
+
+    Each query gives two consecutive rows, tagged with ``labels[0]`` and
+    ``labels[1]``; ``draw_figure`` prints the tag next to the row.
+    """
+    other_by_id = {r["bbox_idx"]: r for r in other}
+    out = []
+    for row in rows:
+        out.append({**row, "label": labels[0]})
+        out.append({**other_by_id[row["bbox_idx"]], "label": labels[1]})
+    return out
+
+
+def draw_figure(
+    rows: list[dict], top_k: int, out_path: Path, title: str | None, lang: str = "en"
+) -> None:
+    text = _TEXT[lang]
     import matplotlib
 
     matplotlib.use("Agg")
@@ -139,9 +178,11 @@ def draw_figure(rows: list[dict], top_k: int, out_path: Path, title: str | None)
 
     for r, row in enumerate(rows):
         first = row["first_correct"]
-        show(axes[r][0], row["path"], BLUE, "query")
+        show(axes[r][0], row["path"], BLUE, text["query"])
+        label = f"{row['label']}\n" if row.get("label") else ""
         axes[r][0].set_ylabel(
-            f"AP {row['ap']:.2f}\nfirst correct: {first if first is not None else '–'}", fontsize=8
+            f"{label}AP {row['ap']:.2f}\n{text['first']}: {first if first is not None else '–'}",
+            fontsize=8,
         )
         shown = row["gallery"][:top_k]
         for c in range(1, n_cols):
@@ -156,7 +197,7 @@ def draw_figure(rows: list[dict], top_k: int, out_path: Path, title: str | None)
                     spine.set_visible(False)
             if r == 0:
                 ax.set_title(str(c), fontsize=9)
-    axes[0][0].set_title("query", fontsize=9)
+    axes[0][0].set_title(text["query"], fontsize=9)
     if title:
         fig.suptitle(title, fontsize=10)
     fig.tight_layout(rect=(0, 0, 1, 0.97 if title else 1))
@@ -175,17 +216,37 @@ def main() -> int:
     parser.add_argument("--select", default="mixed", choices=("mixed", "random", "successes", "failures"))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--title", default=None)
+    parser.add_argument("--queries", type=int, nargs="+", default=None,
+                        help="draw exactly these queries (bbox_idx), instead of --select")
+    parser.add_argument("--compare-with", type=Path, default=None,
+                        help="second .npz of the same split: its ranking is drawn under each query")
+    parser.add_argument("--labels", nargs=2, default=("A", "B"), metavar=("FIRST", "SECOND"),
+                        help="row tags for the two models when --compare-with is given")
+    parser.add_argument("--lang", default="en", choices=sorted(_TEXT), help="language of the text on the figure")
     args = parser.parse_args()
 
-    with np.load(args.embeddings, allow_pickle=False) as data:
-        emb = {k: data[k] for k in data.files}
+    def load(path: Path) -> dict:
+        with np.load(path, allow_pickle=False) as data:
+            return {k: data[k] for k in data.files}
+
+    emb = load(args.embeddings)
     split = str(emb["split"])
-    ranked = rank_queries(emb, load_catalog(args.catalog), split)
-    rows = select_queries(ranked, args.select, args.num_queries, args.seed)
+    catalog = load_catalog(args.catalog)
+    ranked = rank_queries(emb, catalog, split)
+    if args.queries:
+        rows, how = pick_queries(ranked, args.queries), "given list"
+    else:
+        rows = select_queries(ranked, args.select, args.num_queries, args.seed)
+        how = f"{args.select}, seed {args.seed}"
     rank1 = np.mean([r["first_correct"] == 1 for r in ranked])
     print(f"{split}: {len(ranked):,} queries, mAP {np.mean([r['ap'] for r in ranked]):.4f}, rank-1 {rank1:.4f}")
-    print(f"drawing {len(rows)} queries ({args.select}, seed {args.seed}): bbox_idx {[r['bbox_idx'] for r in rows]}")
-    draw_figure(rows, args.top_k, args.out, args.title)
+    print(f"drawing {len(rows)} queries ({how}): bbox_idx {[r['bbox_idx'] for r in rows]}")
+    if args.compare_with is not None:
+        other = load(args.compare_with)
+        if str(other["split"]) != split:
+            raise SystemExit(f"--compare-with is for split {str(other['split'])!r}, expected {split!r}")
+        rows = pair_rows(rows, rank_queries(other, catalog, split), tuple(args.labels))
+    draw_figure(rows, args.top_k, args.out, args.title, lang=args.lang)
     print(f"wrote {args.out}")
     return 0
 
