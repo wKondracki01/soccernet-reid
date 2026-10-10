@@ -7,7 +7,8 @@ Inputs (all written by earlier steps, nothing is trained or evaluated here)
 
 Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     ladder      validation mAP after each step from the starting point to the final model
-    curves      three panels of mAP against the epoch
+    curves      mAP against the epoch, three separate figures: augmentation on ResNet-18,
+                cross-entropy with and without weight decay, final configuration against AUG-MED
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
@@ -145,63 +146,76 @@ def _end_label(ax, x: float, y: float, text: str, dy: float = 0.0) -> None:
                 fontsize=8, color=INK)
 
 
-def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
+# One file per learning-curve figure, so that each can sit in the section it belongs to.
+CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa")
+
+
+def _curve_axes(step: float, epochs: range):
+    """A figure of mAP against the epoch; ``epochs`` are the x ticks, ``step`` the spacing of the y ticks."""
     import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(5.2, 3.3))
+    _style(ax)
+    _comma_axis(ax, step=step)
+    ax.set_xticks(list(epochs))
+    ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
+    ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
+    return fig, ax
+
+
+def _curve_line(ax, run: dict, colour: str, from_epoch: int = 0, **kw):
+    x, y = curve(run)
+    x, y = zip(*[(a, b) for a, b in zip(x, y, strict=True) if a >= from_epoch], strict=True)
+    ax.plot(x, y, color=colour, linewidth=kw.pop("linewidth", 2), solid_capstyle="round", **kw)
+    return x, y
+
+
+def _curve_legend(ax, entries: list[tuple[str, str]]) -> None:
     from matplotlib.lines import Line2D
 
-    fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.3))
-    for ax, step in zip(axes, (0.05, 0.05, 0.02), strict=True):
-        _style(ax)
-        _comma_axis(ax, step=step)
-        ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
-    axes[0].set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
+    handles = [Line2D([0], [0], color=colour, linewidth=2) for colour, _ in entries]
+    ax.legend(handles, [label for _, label in entries], loc="lower right", frameon=False,
+              fontsize=8, labelcolor=INK, handlelength=1.6)
 
-    def line(ax, name: str, colour: str, from_epoch: int = 0, **kw):
-        x, y = curve(runs[name])
-        x, y = zip(*[(a, b) for a, b in zip(x, y, strict=True) if a >= from_epoch], strict=True)
-        ax.plot(x, y, color=colour, linewidth=kw.pop("linewidth", 2), solid_capstyle="round", **kw)
-        return x, y
 
-    def legend(ax, entries: list[tuple[str, str]]) -> None:
-        handles = [Line2D([0], [0], color=colour, linewidth=2) for colour, _ in entries]
-        ax.legend(handles, [label for _, label in entries], loc="lower right", frameon=False,
-                  fontsize=8, labelcolor=INK, handlelength=1.6)
+def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
+    import matplotlib.pyplot as plt
 
-    # (a) augmentation on ResNet-18: training with flips only stops improving early
-    ax = axes[0]
-    ax.set_title("(a) augmentacja, ResNet-18", fontsize=9, color=INK, loc="left")
+    def finish(fig, ax, name: str, left: float, right: float) -> None:
+        ax.set_xlim(left, right)          # the right margin holds the labels at the line ends
+        fig.tight_layout()
+        _save(fig, out_dir, name)
+        plt.close(fig)
+
+    # augmentation on ResNet-18: training with flips only stops improving early
+    fig, ax = _curve_axes(0.05, range(0, 41, 10))
     for name, colour, label, dy in (("G1_PK_SA_BH", BLUE, "AUG-MIN", 0), ("G3_AUG_MED", ORANGE, "AUG-MED", 5),
                                     ("G3_AUG_STRONG", AQUA, "AUG-STRONG", -5)):
-        x, y = line(ax, name, colour, marker="o", markersize=5, markeredgecolor="white", markeredgewidth=1)
+        x, y = _curve_line(ax, runs[name], colour, marker="o", markersize=5, markeredgecolor="white",
+                           markeredgewidth=1)
         _end_label(ax, x[-1], y[-1], label, dy)
-    legend(ax, [(BLUE, "AUG-MIN"), (ORANGE, "AUG-MED"), (AQUA, "AUG-STRONG")])
-    ax.set_xlim(0, 52)
+    _curve_legend(ax, [(BLUE, "AUG-MIN"), (ORANGE, "AUG-MED"), (AQUA, "AUG-STRONG")])
+    finish(fig, ax, CURVE_FIGURES[0], 0, 50)
 
-    # (b) cross-entropy with and without weight decay
-    ax = axes[1]
-    ax.set_title("(b) klasyfikacja CE, ResNet-18", fontsize=9, color=INK, loc="left")
+    # cross-entropy on ResNet-18 with and without weight decay
+    fig, ax = _curve_axes(0.05, range(0, 41, 10))
     for name, colour, label in (("G2_CE", BLUE, "bez weight decay"), ("G2_CE_WD", ORANGE, "z weight decay")):
-        x, y = line(ax, name, colour)
+        x, y = _curve_line(ax, runs[name], colour)
         _end_label(ax, x[-1], y[-1], label)
-    legend(ax, [(BLUE, "bez weight decay"), (ORANGE, "z weight decay")])
-    ax.set_xlim(0, 58)
+    _curve_legend(ax, [(BLUE, "bez weight decay"), (ORANGE, "z weight decay")])
+    finish(fig, ax, CURVE_FIGURES[1], 0, 54)
 
-    # (c) final configuration against the same setup with AUG-MED, three seeds each
-    ax = axes[2]
-    ax.set_title("(c) ResNet-34, po trzy treningi, od 10. epoki", fontsize=9, color=INK, loc="left")
+    # final configuration against the same setup with AUG-MED on ResNet-34, three seeds each, from epoch 10
+    fig, ax = _curve_axes(0.02, range(10, 61, 10))
     for names, colour, label, dy in ((BASE_SEEDS, BLUE, "AUG-MED", -4), (FINAL_SEEDS, ORANGE, "AUG-STRONG", 4)):
         ends = []
         for name in names:
-            x, y = line(ax, name, colour, from_epoch=10, linewidth=1.2, alpha=0.9)
+            x, y = _curve_line(ax, runs[name], colour, from_epoch=10, linewidth=1.2, alpha=0.9)
             ends.append(y[-1])
         _end_label(ax, x[-1], statistics.mean(ends), label, dy)
-    legend(ax, [(BLUE, "AUG-MED"), (ORANGE, "AUG-STRONG")])
-    ax.set_xlim(0, 78)
+    _curve_legend(ax, [(BLUE, "AUG-MED"), (ORANGE, "AUG-STRONG")])
     ax.set_ylim(0.72, 0.82)
-
-    fig.tight_layout()
-    _save(fig, out_dir, "krzywe_uczenia")
-    plt.close(fig)
+    finish(fig, ax, CURVE_FIGURES[2], 8, 73)
 
 
 def dimension_points(runs: dict[str, dict]) -> list[tuple[int, float, float, float]]:
