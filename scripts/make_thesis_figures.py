@@ -11,6 +11,7 @@ Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
+    cmc         share of queries answered within the first k results, for three models
 
 Text on the figures is Polish, numbers use a decimal comma.
 
@@ -341,7 +342,96 @@ def draw_augmentations(
     plt.close(fig)
 
 
-FIGURES = ("ladder", "curves", "dimension", "cost", "augment")
+def cmc_curve(emb: dict, catalog, split: str, max_rank: int = 10) -> list[float]:
+    """CMC(k) for k = 1..max_rank: share of queries with a correct crop among the first k results.
+
+    Uses the ranking of the evaluation (cosine, gallery of the query's action), so
+    CMC(1), CMC(5) and CMC(10) are the Rank-1 / 5 / 10 of the result tables.
+    """
+    import numpy as np
+
+    from soccernet_reid.eval.ranking import compute_rankings
+
+    sub = catalog[catalog["split"] == split]
+    q_person = sub[sub["role"] == "query"].set_index("bbox_idx")["person_uid"]
+    g_person = sub[sub["role"] == "gallery"].set_index("bbox_idx")["person_uid"].to_dict()
+    q_ids = [int(b) for b in emb["query_bbox_idx"]]
+    rankings = compute_rankings(
+        query_feats=emb["query_feats"], gallery_feats=emb["gallery_feats"],
+        query_bbox_idx=q_ids, gallery_bbox_idx=[int(b) for b in emb["gallery_bbox_idx"]],
+        query_actions=[int(a) for a in emb["query_action_idx"]],
+        gallery_actions=[int(a) for a in emb["gallery_action_idx"]],
+        distance="cosine",
+    )
+    hits = np.zeros(max_rank, dtype=np.int64)
+    for qb in q_ids:
+        person = int(q_person.at[qb])
+        first = next((r for r, gb in enumerate(rankings[str(qb)][:max_rank]) if int(g_person[gb]) == person), None)
+        if first is not None:
+            hits[first:] += 1
+    return (hits / len(q_ids)).tolist()
+
+
+# (label on the figure, colour, runs whose curves are averaged)
+CMC_SERIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("konfiguracja końcowa (średnia z 3 treningów)", BLUE, FINAL_SEEDS),
+    ("punkt odniesienia (R18, PK, AUG-MIN)", ORANGE, ("G0a_reference",)),
+    ("klasyfikacja: ArcFace (R18)", AQUA, ("G2_ARC_WD",)),
+)
+
+
+def cmc_series(runs_dir: Path, catalog, max_rank: int = 10) -> list[tuple[str, str, list[float]]]:
+    """(label, colour, CMC values) per series; each curve is checked against the saved Rank-1 / 5 / 10."""
+    import numpy as np
+
+    out = []
+    for label, colour, names in CMC_SERIES:
+        curves = []
+        for name in names:
+            with np.load(runs_dir / name / "embeddings_valid.npz", allow_pickle=False) as data:
+                emb = {k: data[k] for k in data.files}
+            values = cmc_curve(emb, catalog, str(emb["split"]), max_rank)
+            saved = json.loads((runs_dir / name / "eval_valid.json").read_text())
+            for k in (1, 5, 10):
+                if k <= max_rank and abs(values[k - 1] - saved[f"rank-{k}"]) > 1e-6:
+                    raise SystemExit(f"{name}: CMC({k}) = {values[k - 1]:.6f}, saved Rank-{k} = {saved[f'rank-{k}']:.6f}")
+            curves.append(values)
+        out.append((label, colour, np.mean(curves, axis=0).tolist()))
+    return out
+
+
+def draw_cmc(runs_dir: Path, catalog_path: Path, out_dir: Path, max_rank: int = 10) -> None:
+    import pyarrow.dataset  # noqa: F401  (before anything that may load torch)
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    from soccernet_reid.data.catalog import load_catalog
+
+    series = cmc_series(runs_dir, load_catalog(catalog_path), max_rank)
+    ks = list(range(1, max_rank + 1))
+    fig, ax = plt.subplots(figsize=(5.6, 3.5))
+    _style(ax)
+    for label, colour, values in series:
+        ax.plot(ks, values, color=colour, linewidth=2, marker="o", markersize=5.5,
+                markeredgecolor="white", markeredgewidth=1.2, solid_capstyle="round")
+        # the curves meet on the right, so the values are written where they differ: at k = 1
+        ax.annotate(pl(values[0], 3), (1, values[0]), textcoords="offset points", xytext=(-7, 0),
+                    ha="right", va="center", fontsize=8, color=INK)
+        print(f"{label}: " + " ".join(pl(v, 4) for v in values))
+    ax.legend([Line2D([0], [0], color=c, linewidth=2, marker="o", markersize=5.5, markeredgecolor="white")
+               for _, c, _ in series], [label for label, _, _ in series], loc="lower right",
+              frameon=False, fontsize=8, labelcolor=INK, handlelength=1.8)
+    ax.set_xticks(ks)
+    ax.set_xlim(-0.2, max_rank + 0.4)      # room on the left for the values at k = 1
+    ax.set_ylim(0.5, 1.0)
+    ax.set_xlabel("k (liczba pierwszych wyników)", fontsize=9, color=INK_SECONDARY)
+    ax.set_ylabel("odsetek zapytań z trafieniem\nwśród pierwszych k wyników", fontsize=9, color=INK_SECONDARY)
+    _comma_axis(ax, step=0.1, digits=1)
+    _save(fig, out_dir, "krzywe_cmc")
+    plt.close(fig)
+
+
+FIGURES = ("ladder", "curves", "dimension", "cost", "augment", "cmc")
 
 
 def main() -> int:
@@ -371,6 +461,8 @@ def main() -> int:
         draw_cost(runs, json.loads(args.speed.read_text()), args.out)
     if "augment" in args.only:
         draw_augmentations(args.catalog, args.out)
+    if "cmc" in args.only:
+        draw_cmc(args.runs, args.catalog, args.out)
     return 0
 
 

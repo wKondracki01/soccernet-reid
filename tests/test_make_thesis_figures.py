@@ -91,3 +91,31 @@ def test_cost_points_join_speed_with_the_backbone_axis(runs) -> None:
 
 def test_thesis_name_of_the_colour_preset() -> None:
     assert _load_script().AUGMENT_LABELS["aug-bot"] == "AUG-COLOR"
+
+
+def test_cmc_counts_queries_answered_within_k_results() -> None:
+    import numpy as np
+    import pandas as pd
+
+    script = _load_script()
+    rows = [("valid", "query", 0, 0, 1), ("valid", "query", 1, 0, 2), ("valid", "query", 2, 1, 1)]
+    # action 0: gallery crops of persons 1, 9 (distractor), 1, 2;  action 1: persons 5 and 1
+    rows += [("valid", "gallery", 0, 0, 1), ("valid", "gallery", 1, 0, 9), ("valid", "gallery", 2, 0, 1),
+             ("valid", "gallery", 3, 0, 2), ("valid", "gallery", 4, 1, 5), ("valid", "gallery", 5, 1, 1)]
+    catalog = pd.DataFrame(rows, columns=["split", "role", "bbox_idx", "action_idx", "person_uid"])
+
+    def unit(*v):
+        a = np.asarray(v, dtype=np.float32)
+        return a / np.linalg.norm(a)
+
+    emb = {
+        "query_bbox_idx": np.array([0, 1, 2]), "query_action_idx": np.array([0, 0, 1]),
+        "gallery_bbox_idx": np.array([0, 1, 2, 3, 4, 5]), "gallery_action_idx": np.array([0, 0, 0, 0, 1, 1]),
+        # query 0: the distractor is closest, a correct crop second;  query 1: correct first;
+        # query 2: the wrong person first, the correct one second
+        "query_feats": np.stack([unit(1, 0, 0), unit(0, 1, 0), unit(0, 0, 1)]),
+        "gallery_feats": np.stack([unit(1, 0.5, 0), unit(1, 0.1, 0), unit(1, 1, 0), unit(0.2, 1, 0),
+                                   unit(0, 0.2, 1), unit(0, 1, 1)]),
+    }
+    cmc = script.cmc_curve(emb, catalog, "valid", max_rank=3)
+    assert cmc == pytest.approx([1 / 3, 1.0, 1.0])
