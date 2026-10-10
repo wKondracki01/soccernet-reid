@@ -328,6 +328,8 @@ Najciekawsze kombinacje wybrane na podstawie wyników Faz 1-4. Każdy run **60 e
 >
 > Nie będą liczone: #1 (źle postawiona — straty normalizują embeddingi), #3 w części „Wariant K na konfiguracji końcowej” i „Wariant H” (przebieg `G5_ARC_WD` pokazał, że klasyfikacja z weight decay na konfiguracji końcowej traci 97,6% wag; hybryda wymagałaby nowego kodu i wraca w niej ten sam problem), #8 (tylko 10% klas ma co najmniej trzy wycinki i 7% akcji ma osiem takich klas, więc porównanie mierzyłoby głównie mniejszy zbiór). #5 (GeM) pozostaje nieuruchomiona. Zbiór testowy: oceniana jest wyłącznie konfiguracja końcowa (trzy ziarna), z re-rankingiem strojonym na zbiorze walidacyjnym.
 >
+> **Seria G zakończona 9.10.2026.** Konfiguracja końcowa została policzona na trzech ziarnach i oceniona raz na zbiorze testowym, bez re-rankingu i z re-rankingiem strojonym na zbiorze walidacyjnym; wyniki potwierdzono oficjalnym ewaluatorem SoccerNet. Szybkość ekstraktorów cech zmierzono osobno (`scripts/benchmark_speed.py`), rysunki powstają z `scripts/make_thesis_figures.py` i `scripts/visualize_retrieval.py`. Wyniki liczbowe leżą w `outputs/_g/REVIEW_*.json` i w folderach przebiegów (poza repozytorium).
+>
 > Poza listą: wpływ weight decay na stan sieci zbadano parą przebiegów `DIAG_BOT_WD5E4` / `DIAG_BOT_WD0` (§0) — to notatka robocza, w pracy nieopisywana.
 
 1. **L2-normalizacja embeddingu**: porównanie 3 wariantów głowy × 2 metryki dystansu = **6 konfiguracji** (na 1 najlepszym backbonie + stracie):
