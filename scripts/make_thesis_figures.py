@@ -281,7 +281,7 @@ def draw_cost(runs: dict[str, dict], speed: dict, out_dir: Path) -> None:
     ax.set_xlabel("czas przetworzenia jednego zdjęcia [ms]", fontsize=9, color=INK_SECONDARY)
     ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
     ax.set_xlim(0, max(p["ms"] for p in pts) * 1.35)
-    _comma_axis(ax)
+    _comma_axis(ax, step=0.01)
     from matplotlib.ticker import FuncFormatter
 
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: pl(v, 2)))
