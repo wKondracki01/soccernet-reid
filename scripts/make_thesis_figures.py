@@ -293,7 +293,7 @@ def draw_cost(runs: dict[str, dict], speed: dict, out_dir: Path) -> None:
         ax.annotate(f"{p['label']}\n{pl(p['parameters'] / 1e6, 1)} mln", (p["ms"], p["mAP"]),
                     textcoords="offset points", xytext=(7, 0), ha="left", va="center",
                     fontsize=7.5, color=INK, linespacing=1.1)
-    ax.set_xlabel("czas przetworzenia jednego zdjęcia [ms]", fontsize=9, color=INK_SECONDARY)
+    ax.set_xlabel("czas przetworzenia jednego wycinka [ms]", fontsize=9, color=INK_SECONDARY)
     ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
     ax.set_xlim(0, max(p["ms"] for p in pts) * 1.35)
     _comma_axis(ax, step=0.01)
