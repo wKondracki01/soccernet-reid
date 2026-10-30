@@ -433,7 +433,7 @@ def method_tables(speed: dict) -> list[Table]:
             ["losowa zmiana odcienia (zakres)", DASH, "0,05", "0,05", "0,1"],
             ["zamiana na skalę szarości ($p = 0{,}2$)", DASH, DASH, DASH, yes],
             ["dopełnienie o~10 pikseli i~losowe przycięcie do $256 \\times 128$", DASH, yes, yes, yes],
-            ["RandAugment (2 operacje, siła 9)", DASH, DASH, yes, DASH],
+            ["losowy dobór przekształceń obrazu (2 operacje, siła 9)", DASH, DASH, yes, DASH],
             ["rozmycie Gaussa (jądro 3, $\\sigma$ od 0,1 do 2,0, $p = 0{,}5$)", DASH, DASH, yes, DASH],
             ["zniekształcenie perspektywiczne (siła 0,2, $p = 0{,}3$)", DASH, DASH, yes, DASH],
             ["Random Erasing ($p = 0{,}5$, od 2\\% do 40\\% pola)", DASH, yes, yes, yes],
