@@ -453,9 +453,10 @@ def method_tables(speed: dict) -> list[Table]:
     plan = Table(
         "plan-etapow", "Zakres badań i~powiązanie etapów porównań z~pytaniami badawczymi",
         par(0.22) + par(0.27) + par(0.30) + par(0.07),
-        [["Część badań", "Porównywany element", "Ustawienia pozostałych elementów", "Epoki uczenia"]],
+        [["Część badań", "Porównywany element", "Ustawienia pozostałych elementów", "Epoki"]],
         [
-            ["punkty odniesienia", "strata trójkowa oraz dwa warianty entropii krzyżowej, bez regularyzacji wag i~z~nią",
+            ["punkty odniesienia", "strata trójkowa oraz dwa warianty entropii krzyżowej, bez regularyzacji wag "
+             "(ang.~\\emph{weight decay}) i~z~nią",
              "ResNet-18, AUG-MIN, PK-BH dla straty trójkowej, RAND dla entropii krzyżowej", "60"],
             ["etap 1: dobór przykładów (PB1)", "siedem wariantów", "ResNet-18, strata trójkowa, AUG-MIN", "40"],
             ["etap 2: funkcje straty (PB2)", "sześć funkcji i~ich ustawienia",
