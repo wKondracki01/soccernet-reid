@@ -100,7 +100,7 @@ def ladder_steps(runs: dict[str, dict], runs_dir: Path) -> list[tuple[str, float
     steps = [
         ("punkt wyjścia\nR18, PK, AUG-MIN", best_map(runs["G1_PK_BH"])),
         ("sampler\nPK-SA", best_map(runs["G1_PK_SA_BH"])),
-        ("augmentacja\nAUG-MED", best_map(runs["G3_AUG_MED"])),
+        ("augmentacje\nAUG-MED", best_map(runs["G3_AUG_MED"])),
         ("sieć\nResNet-34", best_map(runs["G4_R34"])),
         ("AUG-STRONG,\n60 epok", mean_best(runs, FINAL_SEEDS)),
     ]
@@ -199,10 +199,10 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
 
     # cross-entropy on ResNet-18 with and without weight decay
     fig, ax = _curve_axes(0.05, range(0, 41, 10))
-    for name, colour, label in (("G2_CE", BLUE, "bez weight decay"), ("G2_CE_WD", ORANGE, "z weight decay")):
+    for name, colour, label in (("G2_CE", BLUE, "bez regularyzacji wag"), ("G2_CE_WD", ORANGE, "z regularyzacją wag")):
         x, y = _curve_line(ax, runs[name], colour)
         _end_label(ax, x[-1], y[-1], label)
-    _curve_legend(ax, [(BLUE, "bez weight decay"), (ORANGE, "z weight decay")])
+    _curve_legend(ax, [(BLUE, "bez regularyzacji wag"), (ORANGE, "z regularyzacją wag")])
     finish(fig, ax, CURVE_FIGURES[1], 0, 54)
 
     # final configuration against the same setup with AUG-MED on ResNet-34, three seeds each, from epoch 10
@@ -247,7 +247,7 @@ def draw_dimension(runs: dict[str, dict], out_dir: Path) -> None:
                     fontsize=8, color=INK)
     ax.set_xticks(xs)
     ax.set_xticklabels([str(p[0]) for p in pts], fontsize=8, color=INK)
-    ax.set_xlabel("wymiar embeddingu", fontsize=9, color=INK_SECONDARY)
+    ax.set_xlabel("wymiar wektora cech", fontsize=9, color=INK_SECONDARY)
     ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
     ax.set_ylim(0.79, 0.83)
     _comma_axis(ax, step=0.01)

@@ -99,7 +99,7 @@ def test_run_is_described_by_what_distinguishes_it(tmp_path) -> None:
     config["loss"] = {"name": "ce", "label_smoothing": 0.1}
     config["sampler"] = {"name": "random", "batch_size": 32}
     config["optimizer"]["weight_decay"] = 0.0005
-    assert "entropia krzyżowa, sampler losowy, weight decay" in script.describe(config)
+    assert "entropia krzyżowa, sampler losowy, regularyzacja wag" in script.describe(config)
 
 
 def test_scores_come_from_the_re_evaluation_and_fall_back_to_the_log(tmp_path) -> None:
@@ -151,5 +151,6 @@ def test_method_tables_are_consistent() -> None:
     for table in tables:
         script.render(table)
     plan = tables[4]
-    counts = [int(r[-1]) for r in plan.rows if r is not None]
-    assert sum(counts[:-1]) == counts[-1] == sum(len(names) for _, names in script.STAGES) == 47
+    names = [name for _, group in script.STAGES for name in group]
+    assert len(names) == len(set(names)) == 47
+    assert len(plan.rows) == len(script.STAGES)

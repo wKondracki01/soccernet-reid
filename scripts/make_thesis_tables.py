@@ -93,10 +93,10 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
                                   "G1_PK_SA_BH_XBM")),
     ("Etap 2: funkcje straty", ("G2_CONT", "G2_CONT_M1", "G2_MS", "G2_MS_B05", "G2_CIRCLE", "G2_CIRCLE_M04",
                                 "G2_CE", "G2_CE_WD", "G2_ARC", "G2_ARC_WD")),
-    ("Etap 3: augmentacja", ("G3_AUG_MED", "G3_AUG_STRONG", "G3_AUG_BOT")),
+    ("Etap 3: augmentacje", ("G3_AUG_MED", "G3_AUG_STRONG", "G3_AUG_BOT")),
     ("Etap 4: ekstraktory cech", ("G4_R34", "G4_EB1", "G4_EB2", "G4_VGG11_BN_CONV", "G4_VGG16_BN_CONV",
                                   "G4_VGG11_BN", "G4_VGG16_BN")),
-    ("Etap 5: weryfikacja wyborów", ("G5_REF", "G5_REF_S1", "G5_REF_S2", "G5_STRONG", "G5_XBM", "G5_CIRCLE",
+    ("Etap 5: weryfikacja wybranych wariantów", ("G5_REF", "G5_REF_S1", "G5_REF_S2", "G5_STRONG", "G5_XBM", "G5_CIRCLE",
                                      "G5_MS", "G5_PK", "G5_ARC_WD")),
     ("Konfiguracja końcowa: dodatkowe treningi", ("G5_STRONG_S1", "G5_STRONG_S2")),
     ("Badania uzupełniające", ("G6_D64", "G6_D128", "G6_D256", "G6_D1024", "G6_SCRATCH", "G6_SCRATCH_CIRCLE")),
@@ -163,6 +163,7 @@ class Table:
     rows: list[list[str] | None]    # None draws a horizontal rule
     size: str = "\\small"
     long: bool = False              # longtable that may break across pages
+    notes: str = ""
 
 
 _MULTICOLUMN = re.compile(r"^\\multicolumn\{(\d+)\}")
@@ -220,6 +221,9 @@ def render(table: Table) -> str:
             table.size, f"\\begin{{tabular}}{{{table.spec}}}",
             "\\hline", *head, "\\hline", *body, "\\hline", "\\end{tabular}", "\\end{table}",
         ]
+        if table.notes:
+            out.insert(-1, "\\par\\smallskip\\begin{minipage}{0.97\\linewidth}\\footnotesize "
+                       + table.notes + "\\end{minipage}")
     return "\n".join(out) + "\n"
 
 
@@ -338,10 +342,10 @@ def describe(config: dict) -> str:
     else:
         parts.append("sampler losowy" if config["sampler"]["name"] == "random" else SAMPLER_CODES[config["sampler"]["name"]])
     if config["optimizer"]["weight_decay"] > 0:
-        parts.append("weight decay")
+        parts.append("regularyzacja wag")
     parts.append(AUGMENT_LABELS[config["transform"]["level"]])
     if config["embedding_dim"] != 512:
-        parts.append(f"embedding {config['embedding_dim']}")
+        parts.append(f"wektor cech o~wymiarze {config['embedding_dim']}")
     if config["seed"] != 0:
         parts.append(f"ziarno {config['seed']}")
     return ", ".join(parts)
@@ -402,10 +406,10 @@ def method_tables(speed: dict) -> list[Table]:
             ["RAND", "losowy", "32", "wszystkie trójki", "nie"],
             ["PK-SH", "PK ($16 \\times 2$)", "32", "semi-hard", "nie"],
             ["PK-BH", "PK ($16 \\times 2$)", "32", "batch-hard", "nie"],
-            ["PK-BH-XBM", "PK ($16 \\times 2$)", "32", "batch-hard", "1024 embeddingi"],
+            ["PK-BH-XBM", "PK ($16 \\times 2$)", "32", "batch-hard", "1024 wektory cech"],
             ["PK-SA-SH", "PK-SA ($8 \\times 2$)", "16", "semi-hard", "nie"],
             ["PK-SA-BH", "PK-SA ($8 \\times 2$)", "16", "batch-hard", "nie"],
-            ["PK-SA-BH-XBM", "PK-SA ($8 \\times 2$)", "16", "batch-hard", "1024 embeddingi"],
+            ["PK-SA-BH-XBM", "PK-SA ($8 \\times 2$)", "16", "batch-hard", "1024 wektory cech"],
         ],
     )
     losses = Table(
@@ -447,28 +451,29 @@ def method_tables(speed: dict) -> list[Table]:
         [[name, tt(weights), num(dim), pl(parameters[code] / 1e6, 2)] for code, (name, weights, dim) in BACKBONES.items()],
     )
     plan = Table(
-        "plan-etapow", "Plan eksperymentów",
-        par(0.19) + par(0.36) + par(0.27) + "r",
-        [["Etap", "Porównywane warianty", "Ustawienia stałe", "Treningi"]],
+        "plan-etapow", "Zakres badań i~powiązanie etapów porównań z~pytaniami badawczymi",
+        par(0.22) + par(0.27) + par(0.30) + par(0.07),
+        [["Część badań", "Porównywany element", "Ustawienia pozostałych elementów", "Epoki uczenia"]],
         [
-            ["Punkty odniesienia", "strata trójkowa z samplerem PK oraz entropia krzyżowa bez weight decay i z weight decay",
-             "ResNet-18, AUG-MIN, 60 epok", "3"],
-            ["Etap 1: dobór przykładów", "siedem wariantów z tabeli~\\ref{tab:warianty-doboru}",
-             "ResNet-18, strata trójkowa, AUG-MIN, 40 epok", "7"],
-            ["Etap 2: funkcje straty", "sześć funkcji z tabeli~\\ref{tab:funkcje-straty}, w tym trzy w dwóch ustawieniach "
-             "i dwie bez weight decay oraz z weight decay", "ResNet-18, AUG-MIN, 40 epok", "10"],
-            ["Etap 3: augmentacja", "cztery zestawy z tabeli~\\ref{tab:zestawy-augmentacji}",
-             "ResNet-18, strata trójkowa, PK-SA-BH, 40 epok", "3"],
-            ["Etap 4: ekstraktory cech", "osiem sieci z tabeli~\\ref{tab:ekstraktory-cech}",
-             "strata trójkowa, PK-SA-BH, AUG-MED, 40 epok", "7"],
-            ["Etap 5: weryfikacja wyborów", "konfiguracja bazowa (trzy treningi) i sześć wariantów różniących się od niej "
-             "jednym elementem", "ResNet-34, 60 epok", "9"],
-            ["Konfiguracja końcowa", "dwa dodatkowe treningi z innym ziarnem", "ResNet-34, 60 epok", "2"],
-            ["Badania uzupełniające", "cztery wymiary embeddingu i dwa treningi bez wag ImageNet",
-             "ResNet-34, 60 epok", "6"],
-            None,
-            ["Razem", "", "", "47"],
+            ["punkty odniesienia", "strata trójkowa oraz dwa warianty entropii krzyżowej, bez regularyzacji wag i~z~nią",
+             "ResNet-18, AUG-MIN, PK-BH dla straty trójkowej, RAND dla entropii krzyżowej", "60"],
+            ["etap 1: dobór przykładów (PB1)", "siedem wariantów", "ResNet-18, strata trójkowa, AUG-MIN", "40"],
+            ["etap 2: funkcje straty (PB2)", "sześć funkcji i~ich ustawienia",
+             "ResNet-18, AUG-MIN, PK-SA dla strat metrycznych, RAND dla klasyfikacyjnych", "40"],
+            ["etap 3: augmentacje (PB3)", "cztery zestawy", "ResNet-18, strata trójkowa BH, PK-SA", "40"],
+            ["etap 4: ekstraktory cech (PB4)", "osiem wariantów", "strata trójkowa BH, PK-SA, AUG-MED", "40"],
+            ["etap 5: weryfikacja wybranych wariantów (PB5)",
+             "sześć zmian konfiguracji bazowej: PK-BH, XBM, Multi-Similarity ($\\lambda=0{,}5$), "
+             "Circle ($(m,\\gamma)=(0{,}4,80)$), ArcFace (RAND, współczynnik regularyzacji wag $5\\cdot10^{-4}$), AUG-STRONG",
+             "baza: ResNet-34, strata trójkowa BH, PK-SA, AUG-MED", "60"],
+            ["konfiguracja końcowa (PB5)", "ocena trzech modeli na zbiorze testowym, bez re-rankingu i~z~nim",
+             "ResNet-34, strata trójkowa BH, PK-SA, AUG-STRONG oraz parametry re-rankingu wybrane na zbiorze walidacyjnym", "60"],
+            ["badania uzupełniające", "wymiar wektora cech (64, 128, 256 i~1024) oraz inicjalizacja od losowych wag",
+             "konfiguracja końcowa oraz wariant ze stratą Circle i~AUG-MED", "$60^{*}$"],
         ],
+        notes="Podano planowaną liczbę epok uczenia modeli. $^{*}$Trening od losowych wag ze stratą trójkową "
+              "przerwano w~21.~epoce, po ukończeniu 20 pełnych epok. Dodatkowe treningi z~innymi ziarnami "
+              "losowania opisano w~tekście.",
     )
     training = Table(
         "ustawienia-treningu", "Ustawienia wspólne dla wszystkich treningów",
@@ -478,12 +483,12 @@ def method_tables(speed: dict) -> list[Table]:
             ["optymalizator", "Adam"],
             ["współczynnik uczenia", "$3{,}5 \\cdot 10^{-4}$"],
             ["harmonogram", "liniowa rozgrzewka przez 5 epok, potem spadek kosinusowy do zera"],
-            ["weight decay", "0 dla strat uczenia metryki, 0 albo $5 \\cdot 10^{-4}$ dla strat klasyfikacyjnych"],
+            ["współczynnik regularyzacji wag", "0 dla strat uczenia metryki, 0 albo $5 \\cdot 10^{-4}$ dla strat klasyfikacyjnych"],
             ["długość epoki", "5000 iteracji niezależnie od rozmiaru batcha"],
             ["liczba epok", "40 w etapach 1--4, 60 w pozostałych treningach"],
             ["precyzja obliczeń", "pojedyncza (32 bity)"],
             ["rozmiar wejścia", "$256 \\times 128$ pikseli"],
-            ["wymiar embeddingu", "512"],
+            ["wymiar wektora cech", "512"],
             ["ocena w trakcie treningu", "zbiór walidacyjny co 5 epok (straty klasyfikacyjne w etapie 2 co epokę), "
              "zapisywany model o najwyższym mAP"],
             ["ziarno", "0, a dla konfiguracji bazowej i końcowej także 1 i 2"],
@@ -508,8 +513,8 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     # reference points: scores without training, then the three reference runs
     reference_runs = [
         ("strata trójkowa, sampler PK, batch-hard", "G0a_reference"),
-        ("entropia krzyżowa bez weight decay", "G0b_variant_K"),
-        ("entropia krzyżowa z weight decay", "G0c_variant_K_WD"),
+        ("entropia krzyżowa bez regularyzacji wag", "G0b_variant_K"),
+        ("entropia krzyżowa z regularyzacją wag", "G0c_variant_K_WD"),
     ]
     values = [v for _, v in UNTRAINED] + [scores(runs_dir, run) for _, run in reference_runs]
     labels = [label for label, _ in UNTRAINED] + [label for label, _ in reference_runs]
@@ -540,8 +545,8 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         (["trójkowa", "margines 0,3"], "G1_PK_SA_BH"),
         (["multi-similarity", "$\\lambda = 0{,}5$"], "G2_MS_B05"),
         (["kontrastywna", "margines 1,0"], "G2_CONT_M1"),
-        (["ArcFace", "z weight decay"], "G2_ARC_WD"),
-        (["entropia krzyżowa", "z weight decay"], "G2_CE_WD"),
+        (["ArcFace", "z regularyzacją wag"], "G2_ARC_WD"),
+        (["entropia krzyżowa", "z regularyzacją wag"], "G2_CE_WD"),
     ]
     tables.append(table_of_runs(
         "wyniki-straty",
@@ -552,8 +557,8 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         ("kontrastywna", "margines 0,5", "G2_CONT", "margines 1,0", "G2_CONT_M1"),
         ("multi-similarity", "$\\lambda = 1$", "G2_MS", "$\\lambda = 0{,}5$", "G2_MS_B05"),
         ("Circle", "$m = 0{,}25$, $\\gamma = 64$", "G2_CIRCLE", "$m = 0{,}4$, $\\gamma = 80$", "G2_CIRCLE_M04"),
-        ("entropia krzyżowa", "bez weight decay", "G2_CE", "z weight decay", "G2_CE_WD"),
-        ("ArcFace", "bez weight decay", "G2_ARC", "z weight decay", "G2_ARC_WD"),
+        ("entropia krzyżowa", "bez regularyzacji wag", "G2_CE", "z regularyzacją wag", "G2_CE_WD"),
+        ("ArcFace", "bez regularyzacji wag", "G2_ARC", "z regularyzacją wag", "G2_ARC_WD"),
     ]
     setting_rows: list[list[str] | None] = []
     for loss, first_label, first, second_label, second in pairs:
@@ -568,10 +573,11 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         setting_rows.append(None)
     tables.append(Table(
         "wyniki-ustawienia-strat",
-        "Wpływ ustawień funkcji straty na mAP na zbiorze walidacyjnym i~na rozkład embeddingów (kosinus: średnie "
-        "podobieństwo kosinusowe embeddingów różnych wycinków, wymiarowość: wymiarowość efektywna, różnica mAP "
+        "Wpływ ustawień funkcji straty na mAP na zbiorze walidacyjnym i~na rozkład wektorów cech (kosinus: średnie "
+        "podobieństwo kosinusowe wektorów cech różnych wycinków, wymiarowość: wymiarowość efektywna, różnica mAP "
         "z~95-procentowym przedziałem ufności)",
-        "llrrrl", [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "Wymiarowość", "Różnica mAP [pp]"]],
+        par(0.18) + par(0.16) + "rrr" + par(0.18),
+        [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "Wymiarowość", "Różnica mAP [pp]"]],
         setting_rows[:-1]))
 
     # stage 3
@@ -598,7 +604,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     # stage 5: the base and the variants that change one element of it, all trained with seed 0
     variants = [
         ("zestaw AUG-STRONG", "G5_STRONG"), ("pamięć XBM", "G5_XBM"), ("strata Circle", "G5_CIRCLE"),
-        ("strata multi-similarity", "G5_MS"), ("sampler PK", "G5_PK"), ("strata ArcFace z~weight decay", "G5_ARC_WD"),
+        ("strata multi-similarity", "G5_MS"), ("sampler PK", "G5_PK"), ("strata ArcFace z~regularyzacją wag", "G5_ARC_WD"),
     ]
     cells = metric_cells([scores(runs_dir, BASE_SEEDS[0])] + [scores(runs_dir, run) for _, run in variants])
     rows = [["konfiguracja bazowa", *cells[0], DASH], None]
@@ -610,7 +616,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         "Wyniki wariantów różniących się od konfiguracji bazowej jednym elementem na zbiorze walidacyjnym "
         "(ResNet-34, 60 epok, to samo ziarno, różnica mAP względem konfiguracji bazowej z~95-procentowym "
         "przedziałem ufności)",
-        "lrrrrl", [["Zmieniony element", *METRIC_HEADER, "Różnica mAP [pp]"]], rows))
+        par(0.26) + "rrrr" + par(0.24), [["Zmieniony element", *METRIC_HEADER, "Różnica mAP [pp]"]], rows))
 
     def seeds_table(name: str, caption: str, seeds: tuple[str, ...]) -> Table:
         values = [scores(runs_dir, run) for run in seeds]
@@ -681,9 +687,9 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     cells = metric_cells([v for _, v in by_size])
     tables.append(Table(
         "wyniki-wymiar",
-        "Wynik konfiguracji końcowej na zbiorze walidacyjnym w~zależności od wymiaru embeddingu "
+        "Wynik konfiguracji końcowej na zbiorze walidacyjnym w~zależności od wymiaru wektora cech "
         "(wiersz dla wymiaru 512 jest średnią z~trzech treningów, pozostałe pochodzą z~jednego treningu)",
-        "rrrrr", [["Wymiar embeddingu", *METRIC_HEADER]],
+        "rrrrr", [["Wymiar wektora cech", *METRIC_HEADER]],
         [[num(size), *c] for (size, _), c in zip(by_size, cells, strict=True)]))
 
     # the challenge leaderboard next to the final configuration; a different split, so only for orientation
