@@ -460,14 +460,14 @@ def method_tables(speed: dict) -> list[Table]:
             ["etap 1: dobór przykładów (PB1)", "siedem wariantów", "ResNet-18, strata trójkowa, AUG-MIN", "40"],
             ["etap 2: funkcje straty (PB2)", "sześć funkcji i~ich ustawienia",
              "ResNet-18, AUG-MIN, PK-SA dla strat metrycznych, RAND dla klasyfikacyjnych", "40"],
-            ["etap 3: augmentacje (PB3)", "cztery zestawy", "ResNet-18, strata trójkowa BH, PK-SA", "40"],
-            ["etap 4: ekstraktory cech (PB4)", "osiem wariantów", "strata trójkowa BH, PK-SA, AUG-MED", "40"],
+            ["etap 3: augmentacje (PB3)", "cztery zestawy", "ResNet-18, strata trójkowa, PK-SA-BH", "40"],
+            ["etap 4: ekstraktory cech (PB4)", "osiem wariantów", "strata trójkowa, PK-SA-BH, AUG-MED", "40"],
             ["etap 5: weryfikacja wybranych wariantów (PB5)",
              "sześć zmian konfiguracji bazowej: PK-BH, XBM, Multi-Similarity, Circle, ArcFace i~AUG-STRONG",
-             "baza: ResNet-34, strata trójkowa BH, PK-SA, AUG-MED", "60"],
+             "baza: ResNet-34, strata trójkowa, PK-SA-BH, AUG-MED", "60"],
             ["konfiguracja końcowa (PB5)", "ocena trzech modeli na zbiorze testowym, bez re-rankingu i~z~nim",
-             "ResNet-34, strata trójkowa BH, PK-SA, AUG-STRONG", "60"],
-            ["badania uzupełniające", "wymiar wektora cech (64, 128, 256 i~1024) oraz inicjalizacja od losowych wag",
+             "ResNet-34, strata trójkowa, PK-SA-BH, AUG-STRONG", "60"],
+            ["badania uzupełniające", "wymiar wektora cech (64, 128, 256 i~1024) oraz inicjalizacja wagami ImageNet lub losowymi",
              "konfiguracja końcowa oraz wariant ze stratą Circle i~AUG-MED", "$60^{*}$"],
         ],
         notes="Podano planowaną liczbę epok uczenia modeli. $^{*}$Trening od losowych wag ze stratą trójkową "
@@ -600,10 +600,10 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         "na karcie RTX 4090",
         "lrrrrrr", ["Sieć", "Parametry [mln]", "Wycinki/s", *METRIC_HEADER], stage4))
 
-    # stage 5: the base and the variants that change one element of it, all trained with seed 0
+    # stage 5: the base and selected variants, all trained with seed 0
     variants = [
         ("zestaw AUG-STRONG", "G5_STRONG"), ("pamięć XBM", "G5_XBM"), ("strata Circle", "G5_CIRCLE"),
-        ("strata multi-similarity", "G5_MS"), ("sampler PK", "G5_PK"), ("strata ArcFace z~regularyzacją wag", "G5_ARC_WD"),
+        ("strata Multi-Similarity", "G5_MS"), ("próbkowanie PK", "G5_PK"), ("strata ArcFace z~regularyzacją wag", "G5_ARC_WD"),
     ]
     cells = metric_cells([scores(runs_dir, BASE_SEEDS[0])] + [scores(runs_dir, run) for _, run in variants])
     rows = [["konfiguracja bazowa", *cells[0], DASH], None]
@@ -612,10 +612,10 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         rows.append([label, *row_cells, f"{points(delta)} {interval(low, high)}"])
     tables.append(Table(
         "wyniki-weryfikacja",
-        "Wyniki wariantów różniących się od konfiguracji bazowej jednym elementem na zbiorze walidacyjnym "
+        "Wyniki ponownego porównania wybranych wariantów na zbiorze walidacyjnym "
         "(ResNet-34, 60 epok, to samo ziarno, różnica mAP względem konfiguracji bazowej z~95-procentowym "
         "przedziałem ufności)",
-        par(0.26) + "rrrr" + par(0.24), [["Zmieniony element", *METRIC_HEADER, "Różnica mAP [pp]"]], rows))
+        par(0.26) + "rrrr" + par(0.24), [["Wariant", *METRIC_HEADER, "Różnica mAP [pp]"]], rows))
 
     def seeds_table(name: str, caption: str, seeds: tuple[str, ...]) -> Table:
         values = [scores(runs_dir, run) for run in seeds]
