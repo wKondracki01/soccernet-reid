@@ -463,11 +463,10 @@ def method_tables(speed: dict) -> list[Table]:
             ["etap 3: augmentacje (PB3)", "cztery zestawy", "ResNet-18, strata trójkowa BH, PK-SA", "40"],
             ["etap 4: ekstraktory cech (PB4)", "osiem wariantów", "strata trójkowa BH, PK-SA, AUG-MED", "40"],
             ["etap 5: weryfikacja wybranych wariantów (PB5)",
-             "sześć zmian konfiguracji bazowej: PK-BH, XBM, Multi-Similarity ($\\lambda=0{,}5$), "
-             "Circle ($(m,\\gamma)=(0{,}4,80)$), ArcFace (RAND, współczynnik regularyzacji wag $5\\cdot10^{-4}$), AUG-STRONG",
+             "sześć zmian konfiguracji bazowej: PK-BH, XBM, Multi-Similarity, Circle, ArcFace i~AUG-STRONG",
              "baza: ResNet-34, strata trójkowa BH, PK-SA, AUG-MED", "60"],
             ["konfiguracja końcowa (PB5)", "ocena trzech modeli na zbiorze testowym, bez re-rankingu i~z~nim",
-             "ResNet-34, strata trójkowa BH, PK-SA, AUG-STRONG oraz parametry re-rankingu wybrane na zbiorze walidacyjnym", "60"],
+             "ResNet-34, strata trójkowa BH, PK-SA, AUG-STRONG", "60"],
             ["badania uzupełniające", "wymiar wektora cech (64, 128, 256 i~1024) oraz inicjalizacja od losowych wag",
              "konfiguracja końcowa oraz wariant ze stratą Circle i~AUG-MED", "$60^{*}$"],
         ],
