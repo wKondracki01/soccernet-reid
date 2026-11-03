@@ -481,11 +481,11 @@ def method_tables(speed: dict) -> list[Table]:
         [
             ["optymalizator", "Adam"],
             ["współczynnik uczenia", "$3{,}5 \\cdot 10^{-4}$"],
-            ["harmonogram", "liniowa rozgrzewka przez 5 epok, potem spadek kosinusowy do zera"],
             ["współczynnik regularyzacji wag", "0 dla strat uczenia metryki, 0 albo $5 \\cdot 10^{-4}$ dla strat klasyfikacyjnych"],
+            ["harmonogram", "liniowa rozgrzewka przez 5 epok, potem spadek kosinusowy do zera"],
             ["długość epoki", "5000 iteracji niezależnie od rozmiaru batcha"],
             ["liczba epok", "40 w etapach 1--4, 60 w pozostałych treningach"],
-            ["precyzja obliczeń", "pojedyncza (32 bity)"],
+            ["format parametrów i~aktywacji", "32-bitowy zmiennoprzecinkowy, bez mieszanej precyzji"],
             ["rozmiar wejścia", "$256 \\times 128$ pikseli"],
             ["wymiar wektora cech", "512"],
             ["ocena w trakcie treningu", "zbiór walidacyjny co 5 epok (straty klasyfikacyjne w etapie 2 co epokę), "
