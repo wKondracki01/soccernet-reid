@@ -8,6 +8,7 @@ Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     action     all queries and gallery crops of one validation action, matches marked by numbers
     model      block diagram: crop -> backbone -> pooling -> projection head -> embedding -> use
     samplers   one batch drawn by the PK sampler and one by the PK-SA sampler, as in training
+    normalization   a synthetic numerical example of query-wise normalization (no dataset)
 
 Inputs
     outputs/catalog.parquet and the dataset images
@@ -208,7 +209,95 @@ def draw_samplers(catalog, out_dir: Path) -> None:
     plt.close(fig)
 
 
-FIGURES = ("task", "action", "model", "samplers")
+def draw_query_normalization(out_dir: Path) -> None:
+    """Illustrate the implemented weighting on synthetic, realizable cosine similarities.
+
+    No identity labels or retrieval-quality claims are assigned to this example.
+    Its five unit vectors can be embedded in any feature space of dimension >= 3.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import FancyBboxPatch
+
+    from soccernet_reid.eval.rerank import dual_softmax_scores, dual_softmax_shares
+
+    temperature = 0.1
+    queries = np.array([[1.0, 0.0, 0.0], [0.5, np.sqrt(0.75), 0.0]])
+    similarity = np.array([[0.8, 0.7, 0.4], [0.9, 0.2, 0.1]])
+    gallery_x = similarity[0]
+    gallery_y = (similarity[1] - 0.5 * gallery_x) / np.sqrt(0.75)
+    gallery = np.column_stack((gallery_x, gallery_y,
+                               np.sqrt(1.0 - gallery_x**2 - gallery_y**2)))
+    np.testing.assert_allclose(np.linalg.norm(gallery, axis=1), 1.0)
+    np.testing.assert_allclose(queries @ gallery.T, similarity)
+    shares = dual_softmax_shares(similarity, temperature)
+    scores = ((similarity + 1.0) / 2.0) * shares
+    np.testing.assert_allclose(shares.sum(axis=0), 1.0)
+    np.testing.assert_allclose(np.log(scores), dual_softmax_scores(similarity, temperature))
+    before = np.argsort(-similarity[0], kind="stable")
+    after = np.argsort(-scores[0], kind="stable")
+    np.testing.assert_array_equal(before, [0, 1, 2])
+    np.testing.assert_array_equal(after, [1, 2, 0])
+
+    # Match the neutral outlines and pastel fills of the chapter-4 model diagram.
+    ink, grey, blue, green = "#26323D", "#F2F4F6", "#E5EEF5", "#E6F0E9"
+    fig, ax = plt.subplots(figsize=(8.4, 4.1))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set(xlim=(0, 620), ylim=(0, 300))
+    ax.axis("off")
+
+    def text(x: float, y: float, value: str, size: float = 10,
+             bold: bool = False) -> None:
+        ax.text(x, y, value, ha="center", va="center", color=ink, fontsize=size,
+                fontweight="bold" if bold else "normal", linespacing=1.35)
+
+    def box(x: float, y: float, w: float, h: float, value: str,
+            fill: str = grey, size: float = 11) -> None:
+        ax.add_patch(FancyBboxPatch((x, y), w, h,
+                     boxstyle="round,pad=0,rounding_size=3", facecolor=fill,
+                     edgecolor=ink, linewidth=0.8))
+        text(x + w / 2, y + h / 2, value, size)
+
+    def arrow(x1: float, y1: float, x2: float, y2: float) -> None:
+        ax.annotate("", xy=(x2, y2), xytext=(x1, y1), arrowprops={
+                    "arrowstyle": "-|>", "color": ink, "linewidth": 1.0,
+                    "shrinkA": 0, "shrinkB": 0})
+
+    def matrix(x: float, values: np.ndarray, title: str, formula: str,
+               digits: int, fill: str) -> None:
+        text(x + 87, 257, title, 11, True)
+        text(x + 87, 234, formula, 11)
+        for j in range(3):
+            text(x + 55 + 47 * j, 211, f"$g_{j + 1}$", 10)
+        for i in range(2):
+            y = 171 - 33 * i
+            text(x + 13, y + 15, f"$q_{i + 1}$", 10, i == 0)
+            for j in range(3):
+                value = f"{values[i, j]:.{digits}f}".replace(".", ",")
+                box(x + 32 + 47 * j, y, 46, 30, value, fill if i == 0 else grey)
+
+    text(310, 289, "Przykład poglądowy dla jednej akcji", 12, True)
+    matrix(7, similarity, "1. Podobieństwa", "$s_{ij}$", 1, blue)
+    matrix(219, shares, "2. Udziały zapytań", "$p_{ij}(T),\\quad T=0{,}1$", 3, blue)
+    matrix(431, scores, "3. Końcowe wartości", "$S_{\\mathrm{N}}(i,j)=\\frac{s_{ij}+1}{2}p_{ij}(T)$", 3, green)
+    arrow(187, 184, 213, 184)
+    arrow(399, 184, 425, 184)
+    text(94, 115, "Wiersze: zapytania\nKolumny: wycinki galerii", 9)
+    text(306, 115, "Softmax w każdej kolumnie\nSuma udziałów w kolumnie: 1", 9)
+    text(518, 115, "Wyniki ważenia podobieństw\nwartościami udziałów", 9)
+    ax.plot([7, 611], [91, 91], color="#BCC4CB", linewidth=0.8)
+    text(310, 76, "Kolejność dla zapytania $q_1$ (sortowanie malejąco)", 11, True)
+    text(148, 54, "Przed normalizacją", 10)
+    text(472, 54, "Po normalizacji", 10)
+    for order, left, fill in ((before, 35, blue), (after, 359, green)):
+        for rank, index in enumerate(order):
+            box(left + 77 * rank, 8, 70, 31, f"$g_{index + 1}$", fill, 12)
+    arrow(280, 23, 340, 23)
+    _save(fig, out_dir, "normalizacja_po_zapytaniach")
+    plt.close(fig)
+
+
+FIGURES = ("task", "action", "model", "samplers", "normalization")
 
 
 def main() -> int:
@@ -220,12 +309,17 @@ def main() -> int:
     args = parser.parse_args()
 
     import matplotlib
+    matplotlib.use("Agg")
+    matplotlib.rcParams["font.family"] = "DejaVu Sans"
+    if "normalization" in args.only:
+        draw_query_normalization(args.out)
+    if not any(name in args.only for name in ("task", "action", "model", "samplers")):
+        return 0
+
     import pyarrow.dataset  # noqa: F401  (before anything that may load torch)
 
     from soccernet_reid.data.catalog import load_catalog
 
-    matplotlib.use("Agg")
-    matplotlib.rcParams["font.family"] = "DejaVu Sans"
     catalog = load_catalog(args.catalog)
     if "task" in args.only:
         draw_task(args.runs, catalog, args.out)
