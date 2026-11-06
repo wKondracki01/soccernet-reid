@@ -241,9 +241,11 @@ def draw_query_normalization(out_dir: Path) -> None:
 
     # Match the neutral outlines and pastel fills of the chapter-4 model diagram.
     ink, grey, blue, green = "#26323D", "#F2F4F6", "#E5EEF5", "#E6F0E9"
-    fig, ax = plt.subplots(figsize=(8.4, 4.1))
+    # 7.2 inches wide, like the model diagram: placed at full text width (15.4 cm), the
+    # 9-point notes stay above 7 points. The caption carries the title, so none is drawn here.
+    fig, ax = plt.subplots(figsize=(7.2, 7.2 * 276 / 620))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set(xlim=(0, 620), ylim=(0, 300))
+    ax.set(xlim=(0, 620), ylim=(0, 276))
     ax.axis("off")
 
     def text(x: float, y: float, value: str, size: float = 10,
@@ -265,21 +267,21 @@ def draw_query_normalization(out_dir: Path) -> None:
 
     def matrix(x: float, values: np.ndarray, title: str, formula: str,
                digits: int, fill: str) -> None:
-        text(x + 87, 257, title, 11, True)
-        text(x + 87, 234, formula, 11)
+        # The display fraction in the third formula needs the extra height between rows.
+        text(x + 87, 263, title, 11, True)
+        text(x + 87, 235, formula, 11)
         for j in range(3):
-            text(x + 55 + 47 * j, 211, f"$g_{j + 1}$", 10)
+            text(x + 55 + 47 * j, 210, f"$g_{j + 1}$", 10)
         for i in range(2):
             y = 171 - 33 * i
             text(x + 13, y + 15, f"$q_{i + 1}$", 10, i == 0)
             for j in range(3):
                 value = f"{values[i, j]:.{digits}f}".replace(".", ",")
-                box(x + 32 + 47 * j, y, 46, 30, value, fill if i == 0 else grey)
+                box(x + 32 + 47 * j, y, 46, 30, value, fill if i == 0 else grey, 10)
 
-    text(310, 289, "Przykład poglądowy dla jednej akcji", 12, True)
     matrix(7, similarity, "1. Podobieństwa", "$s_{ij}$", 1, blue)
     matrix(219, shares, "2. Udziały zapytań", "$p_{ij}(T),\\quad T=0{,}1$", 3, blue)
-    matrix(431, scores, "3. Końcowe wartości", "$S_{\\mathrm{N}}(i,j)=\\frac{s_{ij}+1}{2}p_{ij}(T)$", 3, green)
+    matrix(431, scores, "3. Końcowe wyniki", "$S_{\\mathrm{N}}(i,j)=\\dfrac{s_{ij}+1}{2}\\,p_{ij}(T)$", 3, green)
     arrow(187, 184, 213, 184)
     arrow(399, 184, 425, 184)
     text(94, 115, "Wiersze: zapytania\nKolumny: wycinki galerii", 9)

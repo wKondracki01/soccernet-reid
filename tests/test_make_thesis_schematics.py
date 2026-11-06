@@ -51,6 +51,18 @@ def test_action_and_model_figures_are_written(tmp_path, monkeypatch) -> None:
                                                      "schemat_modelu.pdf", "schemat_modelu.png"]
 
 
+def test_query_normalization_figure_is_written(tmp_path) -> None:
+    """Drawing it runs the figure's own checks of the shares, scores and orders against rerank.py."""
+    pytest.importorskip("matplotlib")
+    import matplotlib
+
+    matplotlib.use("Agg")
+    script = _load_script()
+    script.draw_query_normalization(tmp_path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["normalizacja_po_zapytaniach.pdf",
+                                                          "normalizacja_po_zapytaniach.png"]
+
+
 def test_sampler_batches_follow_the_two_samplers() -> None:
     script = _load_script()
     rows = []
