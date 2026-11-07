@@ -498,6 +498,21 @@ def method_tables(speed: dict) -> list[Table]:
 
 # --------------------------------------------------------------------------- result tables
 
+def computational_cost_table(speed: dict) -> Table:
+    by_code = {result["backbone"]: result for result in speed["results"]}
+    rows = [[name, pl(by_code[code]["latency_ms_single_image"], 2),
+             pl(by_code[code]["train_steps_per_s"], 1)]
+            for code, (name, _, _) in BACKBONES.items()]
+    return Table(
+        "koszt-ekstraktorow",
+        "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech na karcie RTX 4090",
+        par(0.35) + "rr", [["Sieć", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
+        notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
+              "Opóźnienie mierzono dla jednego wycinka, a~szybkość kroku uczenia dla partii 16 wycinków, "
+              "z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
+    )
+
+
 def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, dict], speed: dict) -> list[Table]:
     def table_of_runs(name: str, caption: str, spec: str, header: list[str], labelled: list[tuple[list[str], str]],
                       extra: list[list[str]] | None = None) -> Table:
@@ -596,9 +611,10 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     tables.append(table_of_runs(
         "wyniki-ekstraktory",
         "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok) "
-        "oraz ich koszt: liczba parametrów i~liczba wycinków przetwarzanych w~ciągu sekundy przy batchu 64 "
+        "oraz ich koszt: liczba parametrów i~liczba wycinków przetwarzanych w~ciągu sekundy przy partii 64 "
         "na karcie RTX 4090",
         "lrrrrrr", ["Sieć", "Parametry [mln]", "Wycinki/s", *METRIC_HEADER], stage4))
+    tables.append(computational_cost_table(speed))
 
     # stage 5: the base and selected variants, all trained with seed 0
     variants = [
