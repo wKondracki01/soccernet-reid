@@ -13,9 +13,9 @@ Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     normalization   a synthetic numerical example of query-wise normalization (no dataset)
 
 The figures of chapters 3 and 4 (all but ``task``) share one look: DejaVu Sans, slate lines,
-pastel fills with plain text in the boxes (bold only for headings above them), and a dashed line
-for what happens only during training. Each of them is drawn at the size it is printed at, so a
-9-point label prints at 9 points; the LaTeX width to use is given in the docstring of each function.
+pastel fills, and a dashed line for what happens only during training. Each of them is drawn at
+the size it is printed at, so a 9-point label prints at 9 points; the LaTeX width to use is given
+in the docstring of each function.
 
 Inputs
     outputs/catalog.parquet and the dataset images   (only for ``task`` and ``action``)
@@ -144,18 +144,19 @@ class _Sketch:
                      fontweight="bold" if bold else "normal",
                      bbox={"facecolor": "white", "edgecolor": "none", "pad": 1} if background else None)
 
-    def box(self, x: float, y: float, w: float, h: float, lines: tuple[str, ...] = (),
+    def box(self, x: float, y: float, w: float, h: float, lines: tuple[str, ...] = (), title: str = "",
             fill: str = FILL_GREY, dashed: bool = False, size: float = SIZE_TEXT) -> None:
-        """A rounded box with its lines of plain text centred in it."""
+        """A rounded box with an optional bold title above plain lines, all centred."""
         from matplotlib.patches import FancyBboxPatch
 
         self.ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle=f"round,pad=0,rounding_size={ROUND / self.unit}",
                                          facecolor=fill, edgecolor=SLATE, linewidth=LINE,
                                          linestyle=DASH if dashed else "solid"))
+        rows = ([(title, True)] if title else []) + [(line, False) for line in lines]
         step = size * 1.35 / self.unit
-        top = y + h / 2 + (len(lines) - 1) * step / 2
-        for i, value in enumerate(lines):
-            self.text(x + w / 2, top - i * step, value, size)
+        top = y + h / 2 + (len(rows) - 1) * step / 2
+        for i, (value, bold) in enumerate(rows):
+            self.text(x + w / 2, top - i * step, value, size, bold)
 
     def arrow(self, points: list[tuple[float, float]], dashed: bool = False) -> None:
         """A line through the points with a filled head at the last one."""
@@ -198,29 +199,39 @@ def draw_action(catalog, out_dir: Path) -> None:
 
     queries, gallery = action_example(catalog, ACTION)
     colours = [BLUE, ORANGE]
+    # In points, from the bottom up. Each title sits the same distance above its row of cells (the
+    # tallest crops of both rows fill their cells); the wider gap above the gallery title keeps it
+    # with the row below it.
+    cell_w, cell_h, title_gap, letter_gap, section_gap = 52, 80, 15, 10, 26
+    gallery_bottom = 18
+    gallery_title = gallery_bottom + cell_h + title_gap
+    query_bottom = gallery_title + section_gap + letter_gap
+    query_title = query_bottom + cell_h + title_gap
     with plt.rc_context(STYLE):
-        width, height = 0.8 * TEXT_WIDTH_PT, 240
+        width, height = 0.8 * TEXT_WIDTH_PT, query_title + 8
         s = _Sketch(width, height, printed_width=width)
 
         def crop(path: str, centre: float, bottom: float, number: int | None) -> None:
-            """The crop with its proportions kept, fitted into a 52 x 80 point cell, its letter below the cell."""
+            """The crop with its proportions kept, fitted into its cell, its letter below the cell."""
             colour = MUTED if number is None else colours[(number - 1) % len(colours)]
             with Image.open(path) as im:
                 image = im.convert("RGB")
-            scale = min(52 / image.width, 80 / image.height)
+            scale = min(cell_w / image.width, cell_h / image.height)
             w, h = image.width * scale, image.height * scale
-            x0, y0 = centre - w / 2, bottom + (80 - h) / 2
+            x0, y0 = centre - w / 2, bottom + (cell_h - h) / 2
             s.ax.imshow(image, extent=(x0, x0 + w, y0, y0 + h), aspect="auto", interpolation="antialiased", zorder=1)
             s.ax.add_patch(Rectangle((x0, y0), w, h, fill=False, edgecolor=colour, linewidth=1.5, zorder=2))
-            s.text(centre, bottom - 10, "-" if number is None else chr(64 + number), SIZE_TEXT, True, colour)
+            s.text(centre, bottom - letter_gap, "-" if number is None else chr(64 + number), SIZE_NOTE, True, colour)
 
-        s.text(width / 2, height - 9, "Zapytania z klatki akcji", SIZE_TITLE, True)
+        # The titles only name the two rows of crops, so they are a point smaller than the headings
+        # of the diagrams.
+        s.text(width / 2, query_title, "Zapytania z klatki akcji", SIZE_TEXT, True)
         for i, path in enumerate(queries):
-            crop(path, width / 2 + (i - (len(queries) - 1) / 2) * 66, 134, i + 1)
-        s.text(width / 2, 106, "Pełna galeria tej samej akcji", SIZE_TITLE, True)
+            crop(path, width / 2 + (i - (len(queries) - 1) / 2) * 66, query_bottom, i + 1)
+        s.text(width / 2, gallery_title, "Pełna galeria tej samej akcji", SIZE_TEXT, True)
         step = (width - 8) / len(gallery)
         for i, (path, number) in enumerate(gallery):
-            crop(path, 4 + step * (i + 0.5), 18, number)
+            crop(path, 4 + step * (i + 0.5), gallery_bottom, number)
         s.save(out_dir, "zapytania-galeria-akcja")
 
 
@@ -238,13 +249,22 @@ def draw_preprocessing(out_dir: Path) -> None:
         s.text(side, 250, "Tylko podczas uczenia", SIZE_TITLE, True)
         s.text(side, 237, "(zależnie od wariantu)", SIZE_NOTE)
         s.text(mid, 250, "Przygotowanie wejścia", SIZE_TITLE, True)
-        s.box(mx, 198, mw, 34, ("Wczytanie obrazu jako RGB", "3 kanały, wartości od 0 do 255"))
-        s.box(mx, 153, mw, 33, ("Zmiana rozmiaru", "wysokość 256, szerokość 128"))
-        s.box(mx, 97, mw, 44, ("Przeliczenie wartości", "dzielenie przez 255", "liczby zmiennoprzecinkowe w [0, 1]"))
-        s.box(mx, 53, mw, 32, ("Normalizacja każdego kanału", r"$z = (x - \mu)\,/\,\sigma$"))
-        s.box(mx, 8, mw, 33, ("Wejście modelu", "3 kanały × 256 × 128"))
-        s.box(sx, 145, sw, 37, ("Losowe przekształcenia", "np. odbicie lub zmiana barw"), fill=FILL_TRAIN, dashed=True)
-        s.box(sx, 44, sw, 33, ("Losowe wymazywanie", "fragmentu obrazu"), fill=FILL_TRAIN, dashed=True)
+        # The boxes carry bold titles of their own, so their text is a point smaller than in the
+        # other diagrams: the titles then stay clearly below the 10-point column headings.
+
+        def main_box(y: float, h: float, title: str, *lines: str) -> None:
+            s.box(mx, y, mw, h, lines, title, size=SIZE_NOTE)
+
+        def training_box(y: float, h: float, title: str, *lines: str) -> None:
+            s.box(sx, y, sw, h, lines, title, FILL_TRAIN, dashed=True, size=SIZE_NOTE)
+
+        main_box(198, 34, "Wczytanie obrazu jako RGB", "3 kanały, wartości od 0 do 255")
+        main_box(153, 33, "Zmiana rozmiaru", "wysokość 256, szerokość 128")
+        main_box(97, 44, "Przeliczenie wartości", "dzielenie przez 255", "liczby zmiennoprzecinkowe w [0, 1]")
+        main_box(53, 32, "Normalizacja każdego kanału", r"$z = (x - \mu)\,/\,\sigma$")
+        main_box(8, 33, "Wejście modelu", "3 kanały × 256 × 128")
+        training_box(145, 37, "Losowe przekształcenia", "np. odbicie lub zmiana barw")
+        training_box(44, 33, "Losowe wymazywanie", "fragmentu obrazu")
         for top, bottom in ((198, 186), (153, 141), (97, 85), (53, 41)):
             s.arrow([(mid, top), (mid, bottom)])
         s.arrow([(mx, 169), (210, 169), (210, 163.5), (sx + sw, 163.5)], dashed=True)
