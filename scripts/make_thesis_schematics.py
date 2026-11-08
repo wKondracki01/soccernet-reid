@@ -13,9 +13,9 @@ Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     normalization   a synthetic numerical example of query-wise normalization (no dataset)
 
 The figures of chapters 3 and 4 (all but ``task``) share one look: DejaVu Sans, slate lines,
-pastel fills, and a dashed line for what happens only during training. Each of them is drawn at
-the size it is printed at, so a 9-point label prints at 9 points; the LaTeX width to use is
-given in the docstring of each function.
+pastel fills with plain text in the boxes (bold only for headings above them), and a dashed line
+for what happens only during training. Each of them is drawn at the size it is printed at, so a
+9-point label prints at 9 points; the LaTeX width to use is given in the docstring of each function.
 
 Inputs
     outputs/catalog.parquet and the dataset images   (only for ``task`` and ``action``)
@@ -145,18 +145,17 @@ class _Sketch:
                      bbox={"facecolor": "white", "edgecolor": "none", "pad": 1} if background else None)
 
     def box(self, x: float, y: float, w: float, h: float, lines: tuple[str, ...] = (),
-            title: str = "", fill: str = FILL_GREY, dashed: bool = False, size: float = SIZE_TEXT) -> None:
-        """A rounded box with an optional bold title above plain lines, all centred."""
+            fill: str = FILL_GREY, dashed: bool = False, size: float = SIZE_TEXT) -> None:
+        """A rounded box with its lines of plain text centred in it."""
         from matplotlib.patches import FancyBboxPatch
 
         self.ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle=f"round,pad=0,rounding_size={ROUND / self.unit}",
                                          facecolor=fill, edgecolor=SLATE, linewidth=LINE,
                                          linestyle=DASH if dashed else "solid"))
-        rows = ([(title, True)] if title else []) + [(line, False) for line in lines]
         step = size * 1.35 / self.unit
-        top = y + h / 2 + (len(rows) - 1) * step / 2
-        for i, (value, bold) in enumerate(rows):
-            self.text(x + w / 2, top - i * step, value, size, bold)
+        top = y + h / 2 + (len(lines) - 1) * step / 2
+        for i, value in enumerate(lines):
+            self.text(x + w / 2, top - i * step, value, size)
 
     def arrow(self, points: list[tuple[float, float]], dashed: bool = False) -> None:
         """A line through the points with a filled head at the last one."""
@@ -239,13 +238,13 @@ def draw_preprocessing(out_dir: Path) -> None:
         s.text(side, 250, "Tylko podczas uczenia", SIZE_TITLE, True)
         s.text(side, 237, "(zależnie od wariantu)", SIZE_NOTE)
         s.text(mid, 250, "Przygotowanie wejścia", SIZE_TITLE, True)
-        s.box(mx, 198, mw, 34, ("3 kanały, wartości od 0 do 255",), "Wczytanie obrazu jako RGB")
-        s.box(mx, 153, mw, 33, ("wysokość 256, szerokość 128",), "Zmiana rozmiaru")
-        s.box(mx, 97, mw, 44, ("dzielenie przez 255", "liczby zmiennoprzecinkowe w [0, 1]"), "Przeliczenie wartości")
-        s.box(mx, 53, mw, 32, (r"$z = (x - \mu)\,/\,\sigma$",), "Normalizacja każdego kanału")
-        s.box(mx, 8, mw, 33, ("3 kanały × 256 × 128",), "Wejście modelu")
-        s.box(sx, 145, sw, 37, ("np. odbicie lub zmiana barw",), "Losowe przekształcenia", FILL_TRAIN, dashed=True)
-        s.box(sx, 44, sw, 33, ("fragmentu obrazu",), "Losowe wymazywanie", FILL_TRAIN, dashed=True)
+        s.box(mx, 198, mw, 34, ("Wczytanie obrazu jako RGB", "3 kanały, wartości od 0 do 255"))
+        s.box(mx, 153, mw, 33, ("Zmiana rozmiaru", "wysokość 256, szerokość 128"))
+        s.box(mx, 97, mw, 44, ("Przeliczenie wartości", "dzielenie przez 255", "liczby zmiennoprzecinkowe w [0, 1]"))
+        s.box(mx, 53, mw, 32, ("Normalizacja każdego kanału", r"$z = (x - \mu)\,/\,\sigma$"))
+        s.box(mx, 8, mw, 33, ("Wejście modelu", "3 kanały × 256 × 128"))
+        s.box(sx, 145, sw, 37, ("Losowe przekształcenia", "np. odbicie lub zmiana barw"), fill=FILL_TRAIN, dashed=True)
+        s.box(sx, 44, sw, 33, ("Losowe wymazywanie", "fragmentu obrazu"), fill=FILL_TRAIN, dashed=True)
         for top, bottom in ((198, 186), (153, 141), (97, 85), (53, 41)):
             s.arrow([(mid, top), (mid, bottom)])
         s.arrow([(mx, 169), (210, 169), (210, 163.5), (sx + sw, 163.5)], dashed=True)
