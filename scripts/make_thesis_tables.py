@@ -49,16 +49,6 @@ METRICS = ("mAP", "rank-1", "rank-5", "rank-10")
 METRIC_HEADER = ["mAP", "Rank-1", "Rank-5", "Rank-10"]
 DASH = "--"
 
-# Validation scores that need no training. The first two follow from the protocol alone
-# (random embeddings, mean of the seeds 0-4; one constant vector for every crop), the
-# third is ResNet-18 with its ImageNet weights (scripts/smoke_eval.py). All three were
-# recomputed on 2026-10-11 and agree with these values to the fourth decimal place.
-UNTRAINED = (
-    ("losowy ranking", (0.1942, 0.0673, 0.3135, 0.5755)),
-    ("ten sam wektor dla każdego wycinka", (0.2808, 0.1235, 0.5143, 0.7762)),
-    ("ResNet-18 z wagami ImageNet, bez douczania", (0.3295, 0.2253, 0.5058, 0.6884)),
-)
-
 # Leaderboard of the SoccerNet Re-Identification challenge 2023 (challenge split, per cent), as
 # published in the README of the official repository github.com/SoccerNet/sn-reid; read 2026-10-11.
 CHALLENGE_2023 = (
@@ -498,6 +488,27 @@ def method_tables(speed: dict) -> list[Table]:
 
 # --------------------------------------------------------------------------- result tables
 
+def reference_points_table(runs_dir: Path) -> Table:
+    reference_runs = (
+        ("strata trójkowa, PK-BH", "G0a_reference"),
+        ("entropia krzyżowa bez regularyzacji wag", "G0b_variant_K"),
+        ("entropia krzyżowa z regularyzacją wag", "G0c_variant_K_WD"),
+    )
+    results = [best_scores(runs_dir, run) for _, run in reference_runs]
+    cells = metric_cells([values for _, values in results])
+    rows = [[label, str(epoch), *values]
+            for (label, _), (epoch, _), values in zip(reference_runs, results, cells, strict=True)]
+    return Table(
+        "wyniki-odniesienie",
+        "Wyniki trzech wariantów odniesienia na zbiorze walidacyjnym "
+        "(ResNet-18, AUG-MIN, 60 epok)",
+        par(0.40) + "rrrrr", [["Wariant", "Epoka", *METRIC_HEADER]], rows,
+        notes="Epoka wskazuje stan modelu o~najwyższym walidacyjnym mAP. "
+              "W~wariantach z~entropią krzyżową stosowano próbkowanie RAND, "
+              "a~dodatni współczynnik regularyzacji wag wynosił $5\\cdot10^{-4}$.",
+    )
+
+
 def computational_cost_table(speed: dict) -> Table:
     by_code = {result["backbone"]: result for result in speed["results"]}
     rows = [[name, pl(by_code[code]["latency_ms_single_image"], 2),
@@ -524,21 +535,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
 
     tables: list[Table] = []
 
-    # reference points: scores without training, then the three reference runs
-    reference_runs = [
-        ("strata trójkowa, sampler PK, batch-hard", "G0a_reference"),
-        ("entropia krzyżowa bez regularyzacji wag", "G0b_variant_K"),
-        ("entropia krzyżowa z regularyzacją wag", "G0c_variant_K_WD"),
-    ]
-    values = [v for _, v in UNTRAINED] + [scores(runs_dir, run) for _, run in reference_runs]
-    labels = [label for label, _ in UNTRAINED] + [label for label, _ in reference_runs]
-    cells = metric_cells(values)
-    rows: list[list[str] | None] = [[label, *c] for label, c in zip(labels, cells, strict=True)]
-    rows.insert(len(UNTRAINED), None)
-    tables.append(Table(
-        "wyniki-odniesienie",
-        "Punkty odniesienia na zbiorze walidacyjnym: wartości uzyskane bez treningu oraz trzy treningi "
-        "sieci ResNet-18 z~zestawem AUG-MIN (60 epok)", "lrrrr", [["Wariant", *METRIC_HEADER]], rows))
+    tables.append(reference_points_table(runs_dir))
 
     # stage 1
     stage1 = []
