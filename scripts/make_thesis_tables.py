@@ -7,6 +7,7 @@ Inputs
     outputs/_g/REVIEW_*.json                validation curve and best epoch of each run
     outputs/_g/BOOTSTRAP_*.json             paired bootstrap of differences between runs
     outputs/_g/speed.json                   scripts/benchmark_speed.py
+    outputs/_g/UNTRAINED_valid.json         scripts/untrained_reference.py
     outputs/runs/RUN/stdout.log             the configuration the run was started with
     outputs/runs/RUN/eval_valid.json        re-evaluation of the saved best checkpoint
     outputs/runs/RUN/eval_test.json         final models only
@@ -488,24 +489,36 @@ def method_tables(speed: dict) -> list[Table]:
 
 # --------------------------------------------------------------------------- result tables
 
-def reference_points_table(runs_dir: Path) -> Table:
+def reference_points_table(runs_dir: Path, untrained: dict) -> Table:
+    """Scores without training (scripts/untrained_reference.py), then the three reference runs."""
+    untrained_rows = (
+        ("losowy ranking", untrained["random_ranking"]["mean"]),
+        ("ten sam wektor dla każdego wycinka", untrained["same_vector"]),
+        ("ResNet-18 z wagami ImageNet, bez douczania", untrained["resnet18_imagenet"]),
+    )
     reference_runs = (
         ("strata trójkowa, PK-BH", "G0a_reference"),
         ("entropia krzyżowa bez regularyzacji wag", "G0b_variant_K"),
         ("entropia krzyżowa z regularyzacją wag", "G0c_variant_K_WD"),
     )
     results = [best_scores(runs_dir, run) for _, run in reference_runs]
-    cells = metric_cells([values for _, values in results])
-    rows = [[label, str(epoch), *values]
-            for (label, _), (epoch, _), values in zip(reference_runs, results, cells, strict=True)]
+    cells = metric_cells([tuple(values[m] for m in METRICS) for _, values in untrained_rows]
+                         + [values for _, values in results])
+    labels = [label for label, _ in untrained_rows] + [label for label, _ in reference_runs]
+    epochs = [DASH] * len(untrained_rows) + [str(epoch) for epoch, _ in results]
+    rows: list[list[str] | None] = [[label, epoch, *values]
+                                    for label, epoch, values in zip(labels, epochs, cells, strict=True)]
+    rows.insert(len(untrained_rows), None)
+    draws = {5: "pięciu"}[len(untrained["random_ranking"]["seeds"])]     # small counts are written in words
     return Table(
         "wyniki-odniesienie",
-        "Wyniki trzech wariantów odniesienia na zbiorze walidacyjnym "
-        "(ResNet-18, AUG-MIN, 60 epok)",
+        "Wyniki punktów odniesienia na zbiorze walidacyjnym: warianty bez uczenia na badanym zbiorze "
+        "oraz trzy treningi sieci ResNet-18 z~zestawem AUG-MIN (60 epok)",
         par(0.40) + "rrrrr", [["Wariant", "Epoka", *METRIC_HEADER]], rows,
-        notes="Epoka wskazuje stan modelu o~najwyższym walidacyjnym mAP. "
+        notes=f"Losowy ranking to średnia z~{draws} losowań. "
+              "Epoka wskazuje stan modelu o~najwyższym walidacyjnym mAP. "
               "W~wariantach z~entropią krzyżową stosowano próbkowanie RAND, "
-              "a~dodatni współczynnik regularyzacji wag wynosił $5\\cdot10^{-4}$.",
+              "a~w~wariancie z~regularyzacją wag jej współczynnik wynosił $5\\cdot10^{-4}$.",
     )
 
 
@@ -524,7 +537,8 @@ def computational_cost_table(speed: dict) -> Table:
     )
 
 
-def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, dict], speed: dict) -> list[Table]:
+def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, dict], speed: dict,
+                  untrained: dict) -> list[Table]:
     def table_of_runs(name: str, caption: str, spec: str, header: list[str], labelled: list[tuple[list[str], str]],
                       extra: list[list[str]] | None = None) -> Table:
         """Rows sorted by mAP, best first; ``extra`` are columns placed after the scores."""
@@ -535,7 +549,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
 
     tables: list[Table] = []
 
-    tables.append(reference_points_table(runs_dir))
+    tables.append(reference_points_table(runs_dir, untrained))
 
     # stage 1
     stage1 = []
@@ -772,7 +786,8 @@ def main() -> int:
         tables += method_tables(speed)
     runs = load_reviews(args.reviews)
     if "results" in args.only:
-        tables += result_tables(runs, args.runs, load_bootstrap(args.reviews), speed)
+        untrained = json.loads((args.reviews / "UNTRAINED_valid.json").read_text())
+        tables += result_tables(runs, args.runs, load_bootstrap(args.reviews), speed, untrained)
     if "appendix" in args.only:
         tables.append(appendix_table(runs, args.runs))
 
