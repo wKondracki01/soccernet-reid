@@ -40,6 +40,18 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 INK, INK_SECONDARY, GRID = "#0b0b0b", "#52514e", "#e6e5e1"
 
+# The look of the chapter 3 and 4 schematics (scripts/make_thesis_schematics.py), used by the learning
+# curves: dark slate text, thin lines and figures drawn at their printed size, so that an 8 pt label
+# is 8 pt in the thesis. The text is one point smaller than on the schematics, at the author's request.
+TEXT_WIDTH_IN = 154 / 25.4                 # the text block of the EiTI template
+SLATE, RULE = "#26323D", "#BCC4CB"
+SIZE_TEXT, SIZE_NOTE, SIZE_TITLE = 8, 7, 8.7
+DASH = (0, (4.5, 3))                       # in units of the line width
+# Series colours of the learning curves: muted blue, copper and teal in the spirit of the schematics
+# (a 15% tint of the blue is close to their blue fill). Checked with the colour-vision and contrast
+# checks of the dataviz palette validator against white: all pairs pass.
+CURVE_1, CURVE_2, CURVE_3 = "#356fa8", "#cf6f3c", "#2c9b84"
+
 FINAL_SEEDS = ("G5_STRONG", "G5_STRONG_S1", "G5_STRONG_S2")
 BASE_SEEDS = ("G5_REF", "G5_REF_S1", "G5_REF_S2")
 
@@ -121,152 +133,217 @@ def draw_ladder(runs: dict[str, dict], runs_dir: Path, out_dir: Path) -> None:
 
     steps = ladder_steps(runs, runs_dir)
     xs, ys = list(range(len(steps))), [v for _, v in steps]
-    fig, ax = plt.subplots(figsize=(7.0, 3.4))
-    _style(ax)
-    ax.plot(xs, ys, color=BLUE, linewidth=2, marker="o", markersize=8,
-            markeredgecolor="white", markeredgewidth=2, solid_capstyle="round")
+    width = 0.9 * TEXT_WIDTH_IN                  # printed at 0.9 of the text width
+    fig, ax = plt.subplots(figsize=(width, 0.5 * width))
+    _curve_style(ax, xlabel="", ylabel="mAP")
+    ax.plot(xs, ys, **_measured(CURVE_1, len(xs)))
     for i, (x, y) in enumerate(zip(xs, ys, strict=True)):
         if i == 0:   # the line leaves this point upwards: the label goes underneath
-            ax.annotate(pl(y), (x, y), textcoords="offset points", xytext=(0, -10), ha="center",
-                        va="top", fontsize=8, color=INK)
+            ax.annotate(pl(y), (x, y), textcoords="offset points", xytext=(0, -8), ha="center",
+                        va="top", fontsize=SIZE_NOTE, color=SLATE)
             continue
         text = f"{pl(y)}\n(+{pl(100 * (y - ys[i - 1]), 1)} pp)"
-        ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 9), ha="center",
-                    va="bottom", fontsize=8, color=INK, linespacing=1.15)
+        ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 7), ha="center",
+                    va="bottom", fontsize=SIZE_NOTE, color=SLATE, linespacing=1.15)
     ax.set_xticks(xs)
-    ax.set_xticklabels([label for label, _ in steps], fontsize=8, color=INK)
-    ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
+    ax.set_xticklabels([label for label, _ in steps], fontsize=SIZE_NOTE, color=SLATE)
     ax.set_ylim(min(ys) - 0.03, max(ys) + 0.035)
     ax.set_xlim(-0.5, len(steps) - 0.5)
     _comma_axis(ax, step=0.05)
+    fig.tight_layout()
     _save(fig, out_dir, "narastajace_zyski")
     plt.close(fig)
-
-
-def _end_label(ax, x: float, y: float, text: str, dy: float = 0.0) -> None:
-    ax.annotate(text, (x, y), textcoords="offset points", xytext=(6, dy), ha="left", va="center",
-                fontsize=8, color=INK)
-
 
 # One file per learning-curve figure, so that each can sit in the section it belongs to.
 CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa",
                  "krzywe_ustawienia_strat", "krzywe_odniesienie")
 
 
-def _curve_axes(step: float, epochs: range):
-    """A figure of mAP against the epoch; ``epochs`` are the x ticks, ``step`` the spacing of the y ticks."""
+def _curve_style(ax, xlabel: str = "epoka", ylabel: str | None = "mAP",
+                 title: str | None = None) -> None:
+    """Axes of a learning-curve figure in the look of the chapter 3 and 4 schematics."""
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(RULE)
+        ax.spines[side].set_linewidth(0.8)
+    ax.grid(True, axis="y", color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    ax.tick_params(colors=SLATE, labelsize=SIZE_NOTE, length=0)
+    ax.set_xlabel(xlabel, fontsize=SIZE_TEXT, color=SLATE)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=SIZE_TEXT, color=SLATE)
+    if title:
+        ax.set_title(title, fontsize=SIZE_TITLE, color=SLATE)
+
+
+def _curve_axes(step: float, epochs: range, share: float = 0.75):
+    """A figure of mAP against the epoch, printed at ``share`` of the text width; ``epochs`` are the
+    x ticks, ``step`` the spacing of the y ticks."""
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(5.2, 3.3))
-    _style(ax)
+    width = share * TEXT_WIDTH_IN
+    fig, ax = plt.subplots(figsize=(width, 0.62 * width))
+    _curve_style(ax)
     _comma_axis(ax, step=step)
     ax.set_xticks(list(epochs))
-    ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
-    ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
     return fig, ax
 
 
-def _curve_line(ax, run: dict, colour: str, from_epoch: int = 0, **kw):
+def _measured(colour: str, points: int, linewidth: float = 0.8) -> dict:
+    """Plot style of values measured at separate epochs: markers joined by a thin dashed line."""
+    return dict(color=colour, linewidth=linewidth, linestyle=DASH, marker="o",
+                markersize=4.2 if points <= 15 else 2.8, markeredgecolor="white", markeredgewidth=0.5)
+
+
+BEST_LABEL = "wybrany model (najwyższe mAP)"
+
+
+def _best_ring(markersize: float) -> dict:
+    """An open circle drawn around the evaluation whose saved model gives the reported result."""
+    return dict(linestyle="none", marker="o", markersize=markersize + 4.5, markerfacecolor="none",
+                markeredgewidth=1.0)
+
+
+def _curve_line(ax, run: dict, colour: str, from_epoch: int = 0, mark_best: bool = True, **kw):
     x, y = curve(run)
     x, y = zip(*[(a, b) for a, b in zip(x, y, strict=True) if a >= from_epoch], strict=True)
-    ax.plot(x, y, color=colour, linewidth=kw.pop("linewidth", 2), solid_capstyle="round", **kw)
+    style = {**_measured(colour, len(x)), **kw}
+    ax.plot(x, y, **style)
+    best_epoch = int(run["best"][0])
+    if mark_best and best_epoch in x:
+        i = x.index(best_epoch)
+        ax.plot([x[i]], [y[i]], markeredgecolor=colour, zorder=4, **_best_ring(style["markersize"]))
     return x, y
 
 
-def _curve_legend(ax, entries: list[tuple[str, str]], loc: str = "lower right") -> None:
+def _legend_items(entries: list[tuple[str, str]], best: bool = False, extra: list | None = None):
+    """Handles and labels of the series; ``best`` adds the open circle of the selected model and
+    ``extra`` holds further (handle, label) pairs."""
     from matplotlib.lines import Line2D
 
-    handles = [Line2D([0], [0], color=colour, linewidth=2) for colour, _ in entries]
-    ax.legend(handles, [label for _, label in entries], loc=loc, frameon=False,
-              fontsize=8, labelcolor=INK, handlelength=1.6)
+    handles = [Line2D([0], [0], **_measured(colour, 1)) for colour, _ in entries]
+    labels = [label for _, label in entries]
+    if best:
+        handles.append(Line2D([0], [0], markeredgecolor=SLATE, **_best_ring(_measured(SLATE, 1)["markersize"])))
+        labels.append(BEST_LABEL)
+    for handle, label in extra or []:
+        handles.append(handle)
+        labels.append(label)
+    return handles, labels
+
+
+LEGEND = dict(frameon=False, fontsize=SIZE_NOTE, labelcolor=SLATE, handlelength=2.4)
+
+
+def _curve_legend(ax, entries: list[tuple[str, str]], loc: str = "lower right", best: bool = False,
+                  extra: list | None = None) -> None:
+    """Legend inside the axes."""
+    handles, labels = _legend_items(entries, best, extra)
+    ax.legend(handles, labels, loc=loc, **LEGEND)
+
+
+def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra: list | None = None,
+                  ncol: int | None = None) -> None:
+    """Legend centred under the axes: the series in one row (or ``ncol`` columns), and in a second row
+    the open circle of the selected model and any ``extra`` (handle, label) pairs. Drawn after
+    tight_layout, so that it never covers a line."""
+    rows = []
+    if entries:
+        rows.append(_legend_items(entries))
+    if best or extra:
+        rows.append(_legend_items([], best, extra))
+    for i, (handles, labels) in enumerate(rows):
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, -0.075 * i),
+                   ncol=(ncol if i == 0 and ncol else len(labels)), columnspacing=1.5, **LEGEND)
 
 
 def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
 
-    def finish(fig, ax, name: str, left: float, right: float) -> None:
-        ax.set_xlim(left, right)          # the right margin holds the labels at the line ends
+    def finish(fig, ax, name: str, left: float, right: float, legend) -> None:
+        ax.set_xlim(left, right)
         fig.tight_layout()
+        legend(fig)
         _save(fig, out_dir, name)
         plt.close(fig)
 
     # augmentation on ResNet-18: training with flips only stops improving early
     fig, ax = _curve_axes(0.05, range(0, 41, 10))
-    for name, colour, label, dy in (("G1_PK_SA_BH", BLUE, "AUG-MIN", 0), ("G3_AUG_MED", ORANGE, "AUG-MED", 5),
-                                    ("G3_AUG_STRONG", AQUA, "AUG-STRONG", -5)):
-        x, y = _curve_line(ax, runs[name], colour, marker="o", markersize=5, markeredgecolor="white",
-                           markeredgewidth=1)
-        _end_label(ax, x[-1], y[-1], label, dy)
-    _curve_legend(ax, [(BLUE, "AUG-MIN"), (ORANGE, "AUG-MED"), (AQUA, "AUG-STRONG")])
-    finish(fig, ax, CURVE_FIGURES[0], 0, 50)
+    augment = (("G1_PK_SA_BH", CURVE_1, "AUG-MIN"), ("G3_AUG_MED", CURVE_2, "AUG-MED"), ("G3_AUG_STRONG", CURVE_3, "AUG-STRONG"))
+    for name, colour, _ in augment:
+        _curve_line(ax, runs[name], colour)
+    finish(fig, ax, CURVE_FIGURES[0], 0, 42,
+           lambda f: _legend_below(f, [(colour, label) for _, colour, label in augment], best=True))
 
-    # cross-entropy on ResNet-18 with and without weight decay
+    # cross-entropy on ResNet-18 with and without weight decay, evaluated after every epoch
     fig, ax = _curve_axes(0.05, range(0, 41, 10))
-    for name, colour, label in (("G2_CE", BLUE, "bez regularyzacji wag"), ("G2_CE_WD", ORANGE, "z regularyzacją wag")):
-        x, y = _curve_line(ax, runs[name], colour)
-        _end_label(ax, x[-1], y[-1], label)
-    _curve_legend(ax, [(BLUE, "bez regularyzacji wag"), (ORANGE, "z regularyzacją wag")])
-    finish(fig, ax, CURVE_FIGURES[1], 0, 54)
+    for name, colour in (("G2_CE", CURVE_1), ("G2_CE_WD", CURVE_2)):
+        _curve_line(ax, runs[name], colour)
+    finish(fig, ax, CURVE_FIGURES[1], 0, 41,
+           lambda f: _legend_below(f, [(CURVE_1, "bez regularyzacji wag"), (CURVE_2, "z regularyzacją wag")],
+                                   best=True))
 
-    # final configuration against the same setup with AUG-MED on ResNet-34, three seeds each, from epoch 10
+    # final configuration against the same setup with AUG-MED on ResNet-34 from epoch 10: the mean of
+    # the three seeds of each, with a band from the lowest to the highest of them at every evaluation;
+    # the seeds select their models at different epochs, so no single point is marked
     fig, ax = _curve_axes(0.02, range(10, 61, 10))
-    for names, colour, label, dy in ((BASE_SEEDS, BLUE, "AUG-MED", -4), (FINAL_SEEDS, ORANGE, "AUG-STRONG", 4)):
-        ends = []
-        for name in names:
-            x, y = _curve_line(ax, runs[name], colour, from_epoch=10, linewidth=1.2, alpha=0.9)
-            ends.append(y[-1])
-        _end_label(ax, x[-1], statistics.mean(ends), label, dy)
-    _curve_legend(ax, [(BLUE, "AUG-MED"), (ORANGE, "AUG-STRONG")])
+    for names, colour in ((BASE_SEEDS, CURVE_1), (FINAL_SEEDS, CURVE_2)):
+        seeds = [dict(zip(*curve(runs[name]), strict=True)) for name in names]
+        epochs = sorted(e for e in seeds[0] if e >= 10 and all(e in s for s in seeds))
+        values = [[s[e] for s in seeds] for e in epochs]
+        ax.fill_between(epochs, [min(v) for v in values], [max(v) for v in values], color=colour, alpha=0.15,
+                        linewidth=0)
+        ax.plot(epochs, [statistics.mean(v) for v in values], **_measured(colour, len(epochs)))
     ax.set_ylim(0.72, 0.82)
-    finish(fig, ax, CURVE_FIGURES[2], 8, 73)
+    band = Patch(facecolor=SLATE, alpha=0.15, linewidth=0)
+    finish(fig, ax, CURVE_FIGURES[2], 8, 62,
+           lambda f: _legend_below(f, [(CURVE_1, "AUG-MED, średnia"), (CURVE_2, "AUG-STRONG, średnia")],
+                                   extra=[(band, "zakres trzech treningów")]))
 
     # Multi-Similarity and Circle on ResNet-18, each in both settings of stage 2, side by side on one
-    # mAP scale; the figure fills the text width, so it is wider than the single-panel ones above
-    fig, axes = plt.subplots(1, 2, figsize=(6.9, 3.2), sharey=True)
+    # mAP scale; each panel names its settings, the open circle is explained once under both
+    fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.7), sharey=True)
     panels = (
-        ("Multi-Similarity", (("G2_MS", BLUE, "$\\lambda = 1$"), ("G2_MS_B05", ORANGE, "$\\lambda = 0{,}5$"))),
-        ("Circle", (("G2_CIRCLE", BLUE, "$(m, \\gamma) = (0{,}25;\\,64)$"),
-                    ("G2_CIRCLE_M04", ORANGE, "$(m, \\gamma) = (0{,}4;\\,80)$"))),
+        ("Multi-Similarity", (("G2_MS", CURVE_1, "$\\lambda = 1$"), ("G2_MS_B05", CURVE_2, "$\\lambda = 0{,}5$"))),
+        ("Circle", (("G2_CIRCLE", CURVE_1, "$(m, \\gamma) = (0{,}25;\\,64)$"),
+                    ("G2_CIRCLE_M04", CURVE_2, "$(m, \\gamma) = (0{,}4;\\,80)$"))),
     )
     for ax, (title, series) in zip(axes, panels, strict=True):
-        _style(ax)
+        _curve_style(ax, ylabel="mAP" if ax is axes[0] else None, title=title)
         _comma_axis(ax, step=0.05)
         ax.set_xticks(list(range(0, 41, 10)))
         ax.set_xlim(0, 42)
-        ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
-        ax.set_title(title, fontsize=9, color=INK)
         for name, colour, _ in series:
-            _curve_line(ax, runs[name], colour, marker="o", markersize=5, markeredgecolor="white",
-                        markeredgewidth=1)
+            _curve_line(ax, runs[name], colour)
         _curve_legend(ax, [(colour, label) for _, colour, label in series])
-    axes[0].set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
-    axes[0].set_ylim(0.55, 0.77)
+    axes[0].set_ylim(0.52, 0.77)
     fig.tight_layout()
+    _legend_below(fig, [], best=True)
     _save(fig, out_dir, CURVE_FIGURES[3])
     plt.close(fig)
 
-    # the two cross-entropy reference runs (60 epochs): validation mAP next to the mean training loss
-    # of every epoch, which keeps falling without weight decay while mAP declines
-    fig, (left, right) = plt.subplots(1, 2, figsize=(6.9, 3.2))
-    series = (("G0b_variant_K", BLUE, "bez regularyzacji wag"), ("G0c_variant_K_WD", ORANGE, "z regularyzacją wag"))
+    # the two cross-entropy reference runs (60 epochs): validation mAP, measured every five epochs,
+    # next to the mean training loss of every epoch, which is drawn as a continuous line
+    fig, (left, right) = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.7))
+    series = (("G0b_variant_K", CURVE_1, "bez regularyzacji wag"), ("G0c_variant_K_WD", CURVE_2, "z regularyzacją wag"))
+    _curve_style(left, ylabel=None, title="mAP")
+    _curve_style(right, ylabel=None, title="Strata treningowa (średnia w epoce)")
     for ax in (left, right):
-        _style(ax)
         ax.set_xticks(list(range(0, 61, 10)))
         ax.set_xlim(0, 62)
-        ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
     _comma_axis(left, step=0.05)
-    left.set_title("mAP (zbiór walidacyjny)", fontsize=9, color=INK)
     for name, colour, _ in series:
-        _curve_line(left, runs[name], colour, marker="o", markersize=5, markeredgecolor="white", markeredgewidth=1)
+        _curve_line(left, runs[name], colour)
     left.set_ylim(0.33, 0.58)
-    _curve_legend(left, [(colour, label) for _, colour, label in series], loc="lower left")
     _comma_axis(right, digits=0, step=2)
-    right.set_title("strata treningowa (średnia w epoce)", fontsize=9, color=INK)
     for name, colour, _ in series:
         loss = [float(v) for v in runs[name]["train_loss_epoch"]]
-        right.plot(range(1, len(loss) + 1), loss, color=colour, linewidth=2, solid_capstyle="round")
+        right.plot(range(1, len(loss) + 1), loss, color=colour, linewidth=1.0, solid_capstyle="round")
     right.set_ylim(0, 12.5)
     fig.tight_layout()
+    _legend_below(fig, [(colour, label) for _, colour, label in series], best=True)
     _save(fig, out_dir, CURVE_FIGURES[4])
     plt.close(fig)
 
@@ -288,25 +365,23 @@ def draw_dimension(runs: dict[str, dict], out_dir: Path) -> None:
     pts = dimension_points(runs)
     xs = list(range(len(pts)))
     ys = [p[1] for p in pts]
-    fig, ax = plt.subplots(figsize=(5.0, 3.1))
-    _style(ax)
+    width = 0.7 * TEXT_WIDTH_IN                  # printed at 0.7 of the text width
+    fig, ax = plt.subplots(figsize=(width, 0.62 * width))
+    _curve_style(ax, xlabel="wymiar wektora cech", ylabel="mAP")
     for x, (_, mean, low, high) in zip(xs, pts, strict=True):
-        if high > low:
-            ax.plot([x, x], [low, high], color=BLUE, linewidth=2, alpha=0.35, solid_capstyle="round")
-    ax.plot(xs, ys, color=BLUE, linewidth=2, marker="o", markersize=8, markeredgecolor="white",
-            markeredgewidth=2, solid_capstyle="round")
+        if high > low:                           # the range of the three seeds of D = 512
+            ax.plot([x, x], [low, high], color=CURVE_1, linewidth=1.0, alpha=0.45, solid_capstyle="round")
+    ax.plot(xs, ys, **_measured(CURVE_1, len(xs)))
     for x, (_, mean, _, high) in zip(xs, pts, strict=True):   # above the top of the seed range
-        ax.annotate(pl(mean), (x, high), textcoords="offset points", xytext=(0, 9), ha="center",
-                    fontsize=8, color=INK)
+        ax.annotate(pl(mean), (x, high), textcoords="offset points", xytext=(0, 6), ha="center",
+                    fontsize=SIZE_NOTE, color=SLATE)
     ax.set_xticks(xs)
-    ax.set_xticklabels([str(p[0]) for p in pts], fontsize=8, color=INK)
-    ax.set_xlabel("wymiar wektora cech", fontsize=9, color=INK_SECONDARY)
-    ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
+    ax.set_xticklabels([str(p[0]) for p in pts], fontsize=SIZE_NOTE, color=SLATE)
     ax.set_ylim(0.79, 0.83)
     _comma_axis(ax, step=0.01)
+    fig.tight_layout()
     _save(fig, out_dir, "wymiar_embeddingu")
     plt.close(fig)
-
 
 # backbone code in speed.json -> (run with the 40-epoch result of the backbone axis, label on the figure)
 BACKBONE_RUNS: dict[str, tuple[str, str]] = {
@@ -335,27 +410,25 @@ def cost_points(runs: dict[str, dict], speed: dict) -> list[dict]:
 
 def draw_cost(runs: dict[str, dict], speed: dict, out_dir: Path) -> None:
     import matplotlib.pyplot as plt
-
-    pts = cost_points(runs, speed)
-    fig, ax = plt.subplots(figsize=(6.2, 3.6))
-    _style(ax)
-    ax.grid(True, axis="x", color=GRID, linewidth=0.6)
-    ax.scatter([p["ms"] for p in pts], [p["mAP"] for p in pts], s=64, color=BLUE,
-               edgecolors="white", linewidths=2, zorder=3)
-    for p in pts:
-        ax.annotate(f"{p['label']}\n{pl(p['parameters'] / 1e6, 1)} mln", (p["ms"], p["mAP"]),
-                    textcoords="offset points", xytext=(7, 0), ha="left", va="center",
-                    fontsize=7.5, color=INK, linespacing=1.1)
-    ax.set_xlabel("czas przetworzenia jednego wycinka [ms]", fontsize=9, color=INK_SECONDARY)
-    ax.set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
-    ax.set_xlim(0, max(p["ms"] for p in pts) * 1.35)
-    _comma_axis(ax, step=0.01)
     from matplotlib.ticker import FuncFormatter
 
+    pts = cost_points(runs, speed)
+    width = 0.8 * TEXT_WIDTH_IN                  # printed at 0.8 of the text width
+    fig, ax = plt.subplots(figsize=(width, 0.6 * width))
+    _curve_style(ax, xlabel="czas przetworzenia jednego wycinka [ms]", ylabel="mAP")
+    ax.grid(True, axis="x", color=GRID, linewidth=0.6)
+    ax.scatter([p["ms"] for p in pts], [p["mAP"] for p in pts], s=26, color=CURVE_1,
+               edgecolors="white", linewidths=0.6, zorder=3)
+    for p in pts:
+        ax.annotate(f"{p['label']}\n{pl(p['parameters'] / 1e6, 1)} mln", (p["ms"], p["mAP"]),
+                    textcoords="offset points", xytext=(5, 0), ha="left", va="center",
+                    fontsize=SIZE_NOTE, color=SLATE, linespacing=1.1)
+    ax.set_xlim(0, max(p["ms"] for p in pts) * 1.35)
+    _comma_axis(ax, step=0.01)
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: pl(v, 2)))
+    fig.tight_layout()
     _save(fig, out_dir, "dokladnosc_wobec_kosztu")
     plt.close(fig)
-
 
 # preset key in the code -> name used in the thesis ("aug-bot" is called AUG-COLOR there)
 AUGMENT_LABELS: dict[str, str] = {
@@ -441,9 +514,9 @@ def cmc_curve(emb: dict, catalog, split: str, max_rank: int = 10) -> list[float]
 
 # (label on the figure, colour, runs whose curves are averaged)
 CMC_SERIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("konfiguracja końcowa (średnia z 3 treningów)", BLUE, FINAL_SEEDS),
-    ("punkt odniesienia (R18, PK, AUG-MIN)", ORANGE, ("G0a_reference",)),
-    ("klasyfikacja: ArcFace (R18)", AQUA, ("G2_ARC_WD",)),
+    ("konfiguracja końcowa (średnia z trzech treningów)", CURVE_1, FINAL_SEEDS),
+    ("punkt odniesienia (R18, PK, AUG-MIN)", CURVE_2, ("G0a_reference",)),
+    ("klasyfikacja: ArcFace (R18)", CURVE_3, ("G2_ARC_WD",)),
 )
 
 
@@ -470,33 +543,29 @@ def cmc_series(runs_dir: Path, catalog, max_rank: int = 10) -> list[tuple[str, s
 def draw_cmc(runs_dir: Path, catalog_path: Path, out_dir: Path, max_rank: int = 10) -> None:
     import pyarrow.dataset  # noqa: F401  (before anything that may load torch)
     import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
 
     from soccernet_reid.data.catalog import load_catalog
 
     series = cmc_series(runs_dir, load_catalog(catalog_path), max_rank)
     ks = list(range(1, max_rank + 1))
-    fig, ax = plt.subplots(figsize=(5.6, 3.5))
-    _style(ax)
+    width = 0.75 * TEXT_WIDTH_IN                 # printed at 0.75 of the text width
+    fig, ax = plt.subplots(figsize=(width, 0.66 * width))
+    _curve_style(ax, xlabel="k (liczba pierwszych wyników)",
+                 ylabel="odsetek zapytań z trafieniem\nwśród pierwszych k wyników")
     for label, colour, values in series:
-        ax.plot(ks, values, color=colour, linewidth=2, marker="o", markersize=5.5,
-                markeredgecolor="white", markeredgewidth=1.2, solid_capstyle="round")
+        ax.plot(ks, values, **_measured(colour, len(ks)))
         # the curves meet on the right, so the values are written where they differ: at k = 1
-        ax.annotate(pl(values[0], 3), (1, values[0]), textcoords="offset points", xytext=(-7, 0),
-                    ha="right", va="center", fontsize=8, color=INK)
+        ax.annotate(pl(values[0], 3), (1, values[0]), textcoords="offset points", xytext=(-6, 0),
+                    ha="right", va="center", fontsize=SIZE_NOTE, color=SLATE)
         print(f"{label}: " + " ".join(pl(v, 4) for v in values))
-    ax.legend([Line2D([0], [0], color=c, linewidth=2, marker="o", markersize=5.5, markeredgecolor="white")
-               for _, c, _ in series], [label for label, _, _ in series], loc="lower right",
-              frameon=False, fontsize=8, labelcolor=INK, handlelength=1.8)
     ax.set_xticks(ks)
     ax.set_xlim(-0.2, max_rank + 0.4)      # room on the left for the values at k = 1
     ax.set_ylim(0.5, 1.0)
-    ax.set_xlabel("k (liczba pierwszych wyników)", fontsize=9, color=INK_SECONDARY)
-    ax.set_ylabel("odsetek zapytań z trafieniem\nwśród pierwszych k wyników", fontsize=9, color=INK_SECONDARY)
     _comma_axis(ax, step=0.1, digits=1)
+    fig.tight_layout()
+    _legend_below(fig, [(colour, label) for label, colour, _ in series], ncol=1)
     _save(fig, out_dir, "krzywe_cmc")
     plt.close(fig)
-
 
 FIGURES = ("ladder", "curves", "dimension", "cost", "augment", "cmc")
 
