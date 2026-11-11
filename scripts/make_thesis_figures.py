@@ -7,8 +7,9 @@ Inputs (all written by earlier steps, nothing is trained or evaluated here)
 
 Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     ladder      validation mAP after each step from the starting point to the final model
-    curves      mAP against the epoch, three separate figures: augmentation on ResNet-18,
-                cross-entropy with and without weight decay, final configuration against AUG-MED
+    curves      mAP against the epoch, four separate figures: augmentation on ResNet-18,
+                cross-entropy with and without weight decay, final configuration against AUG-MED,
+                Multi-Similarity and Circle in their two settings
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
@@ -147,7 +148,8 @@ def _end_label(ax, x: float, y: float, text: str, dy: float = 0.0) -> None:
 
 
 # One file per learning-curve figure, so that each can sit in the section it belongs to.
-CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa")
+CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa",
+                 "krzywe_ustawienia_strat")
 
 
 def _curve_axes(step: float, epochs: range):
@@ -216,6 +218,31 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     _curve_legend(ax, [(BLUE, "AUG-MED"), (ORANGE, "AUG-STRONG")])
     ax.set_ylim(0.72, 0.82)
     finish(fig, ax, CURVE_FIGURES[2], 8, 73)
+
+    # Multi-Similarity and Circle on ResNet-18, each in both settings of stage 2, side by side on one
+    # mAP scale; the figure fills the text width, so it is wider than the single-panel ones above
+    fig, axes = plt.subplots(1, 2, figsize=(6.9, 3.2), sharey=True)
+    panels = (
+        ("Multi-Similarity", (("G2_MS", BLUE, "$\\lambda = 1$"), ("G2_MS_B05", ORANGE, "$\\lambda = 0{,}5$"))),
+        ("Circle", (("G2_CIRCLE", BLUE, "$(m, \\gamma) = (0{,}25;\\,64)$"),
+                    ("G2_CIRCLE_M04", ORANGE, "$(m, \\gamma) = (0{,}4;\\,80)$"))),
+    )
+    for ax, (title, series) in zip(axes, panels, strict=True):
+        _style(ax)
+        _comma_axis(ax, step=0.05)
+        ax.set_xticks(list(range(0, 41, 10)))
+        ax.set_xlim(0, 42)
+        ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
+        ax.set_title(title, fontsize=9, color=INK)
+        for name, colour, _ in series:
+            _curve_line(ax, runs[name], colour, marker="o", markersize=5, markeredgecolor="white",
+                        markeredgewidth=1)
+        _curve_legend(ax, [(colour, label) for _, colour, label in series])
+    axes[0].set_ylabel("mAP (zbiór walidacyjny)", fontsize=9, color=INK_SECONDARY)
+    axes[0].set_ylim(0.55, 0.77)
+    fig.tight_layout()
+    _save(fig, out_dir, CURVE_FIGURES[3])
+    plt.close(fig)
 
 
 def dimension_points(runs: dict[str, dict]) -> list[tuple[int, float, float, float]]:
