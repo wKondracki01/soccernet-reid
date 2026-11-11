@@ -7,9 +7,10 @@ Inputs (all written by earlier steps, nothing is trained or evaluated here)
 
 Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     ladder      validation mAP after each step from the starting point to the final model
-    curves      mAP against the epoch, four separate figures: augmentation on ResNet-18,
+    curves      mAP against the epoch, five separate figures: augmentation on ResNet-18,
                 cross-entropy with and without weight decay, final configuration against AUG-MED,
-                Multi-Similarity and Circle in their two settings
+                Multi-Similarity and Circle in their two settings, and the two cross-entropy
+                reference runs with their training loss
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
@@ -149,7 +150,7 @@ def _end_label(ax, x: float, y: float, text: str, dy: float = 0.0) -> None:
 
 # One file per learning-curve figure, so that each can sit in the section it belongs to.
 CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa",
-                 "krzywe_ustawienia_strat")
+                 "krzywe_ustawienia_strat", "krzywe_odniesienie")
 
 
 def _curve_axes(step: float, epochs: range):
@@ -172,11 +173,11 @@ def _curve_line(ax, run: dict, colour: str, from_epoch: int = 0, **kw):
     return x, y
 
 
-def _curve_legend(ax, entries: list[tuple[str, str]]) -> None:
+def _curve_legend(ax, entries: list[tuple[str, str]], loc: str = "lower right") -> None:
     from matplotlib.lines import Line2D
 
     handles = [Line2D([0], [0], color=colour, linewidth=2) for colour, _ in entries]
-    ax.legend(handles, [label for _, label in entries], loc="lower right", frameon=False,
+    ax.legend(handles, [label for _, label in entries], loc=loc, frameon=False,
               fontsize=8, labelcolor=INK, handlelength=1.6)
 
 
@@ -242,6 +243,31 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     axes[0].set_ylim(0.55, 0.77)
     fig.tight_layout()
     _save(fig, out_dir, CURVE_FIGURES[3])
+    plt.close(fig)
+
+    # the two cross-entropy reference runs (60 epochs): validation mAP next to the mean training loss
+    # of every epoch, which keeps falling without weight decay while mAP declines
+    fig, (left, right) = plt.subplots(1, 2, figsize=(6.9, 3.2))
+    series = (("G0b_variant_K", BLUE, "bez regularyzacji wag"), ("G0c_variant_K_WD", ORANGE, "z regularyzacją wag"))
+    for ax in (left, right):
+        _style(ax)
+        ax.set_xticks(list(range(0, 61, 10)))
+        ax.set_xlim(0, 62)
+        ax.set_xlabel("epoka", fontsize=9, color=INK_SECONDARY)
+    _comma_axis(left, step=0.05)
+    left.set_title("mAP (zbiór walidacyjny)", fontsize=9, color=INK)
+    for name, colour, _ in series:
+        _curve_line(left, runs[name], colour, marker="o", markersize=5, markeredgecolor="white", markeredgewidth=1)
+    left.set_ylim(0.33, 0.58)
+    _curve_legend(left, [(colour, label) for _, colour, label in series], loc="lower left")
+    _comma_axis(right, digits=0, step=2)
+    right.set_title("strata treningowa (średnia w epoce)", fontsize=9, color=INK)
+    for name, colour, _ in series:
+        loss = [float(v) for v in runs[name]["train_loss_epoch"]]
+        right.plot(range(1, len(loss) + 1), loss, color=colour, linewidth=2, solid_capstyle="round")
+    right.set_ylim(0, 12.5)
+    fig.tight_layout()
+    _save(fig, out_dir, CURVE_FIGURES[4])
     plt.close(fig)
 
 

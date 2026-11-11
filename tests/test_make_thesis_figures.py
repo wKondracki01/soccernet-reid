@@ -71,7 +71,7 @@ def test_ladder_adds_reranking_only_when_all_three_seeds_have_it(runs, tmp_path)
     assert len(steps) == 6 and steps[-1][1] == pytest.approx(0.832)
 
 
-def test_learning_curves_are_saved_as_four_separate_figures(tmp_path) -> None:
+def test_learning_curves_are_saved_as_five_separate_figures(tmp_path) -> None:
     pytest.importorskip("matplotlib")
     import matplotlib
 
@@ -80,10 +80,12 @@ def test_learning_curves_are_saved_as_four_separate_figures(tmp_path) -> None:
     names = ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", "G2_CE", "G2_CE_WD", *script.BASE_SEEDS, *script.FINAL_SEEDS,
              "G2_MS", "G2_MS_B05", "G2_CIRCLE", "G2_CIRCLE_M04")
     runs = {name: _run(0.8, [0.70, 0.75, 0.78, 0.80]) for name in names}
+    for name in ("G0b_variant_K", "G0c_variant_K_WD"):    # the reference figure also plots the training loss
+        runs[name] = dict(_run(0.5, [0.47, 0.46, 0.45]), train_loss_epoch=[11.8, 9.4, 6.3, 4.7])
     script.draw_curves(runs, tmp_path)
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
         f"{name}.{ext}" for name in script.CURVE_FIGURES for ext in ("pdf", "png"))
-    assert len(script.CURVE_FIGURES) == 4
+    assert len(script.CURVE_FIGURES) == 5
 
 
 def test_dimension_points_are_sorted_and_512_carries_the_seed_range(runs) -> None:
