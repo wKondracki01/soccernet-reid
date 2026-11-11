@@ -244,18 +244,50 @@ def _curve_legend(ax, entries: list[tuple[str, str]], loc: str = "lower right", 
 
 
 def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra: list | None = None,
-                  ncol: int | None = None) -> None:
+                  ncol: int | None = None, solid: float | None = None) -> None:
     """Legend centred under the axes: the series in one row (or ``ncol`` columns), and in a second row
-    the open circle of the selected model and any ``extra`` (handle, label) pairs. Drawn after
-    tight_layout, so that it never covers a line."""
+    the open circle of the selected model and any ``extra`` (handle, label) pairs. With ``solid`` (a
+    line width) each series shows, under its usual sample, the continuous line it has in another
+    panel. Drawn after tight_layout, so that it never covers a line."""
+    from matplotlib.legend_handler import HandlerBase
+    from matplotlib.lines import Line2D
+
+    class Stacked(HandlerBase):
+        """Two line samples, one above the other, in the space of one legend handle."""
+
+        def create_artists(self, legend, orig_handle, xdescent, ydescent, width, height, fontsize, trans):
+            x0, x1 = -xdescent, -xdescent + width
+            artists = []
+            for line, share in zip(orig_handle, (0.85, 0.15), strict=True):
+                y = -ydescent + share * height
+                art = Line2D([x0, (x0 + x1) / 2, x1], [y, y, y])
+                art.update_from(line)
+                art.set_markevery([1])
+                art.set_transform(trans)
+                artists.append(art)
+            return artists
+
     rows = []
     if entries:
-        rows.append(_legend_items(entries))
+        handles, labels = _legend_items(entries)
+        if solid:
+            handles = [(h, Line2D([0], [0], color=colour, linewidth=solid))
+                       for h, (colour, _) in zip(handles, entries, strict=True)]
+        rows.append((handles, labels))
     if best or extra:
         rows.append(_legend_items([], best, extra))
+    top = 0.0
     for i, (handles, labels) in enumerate(rows):
-        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, -0.075 * i),
-                   ncol=(ncol if i == 0 and ncol else len(labels)), columnspacing=1.5, **LEGEND)
+        stacked = i == 0 and bool(solid)
+        legend = fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, top),
+                            ncol=(ncol if i == 0 and ncol else len(labels)), columnspacing=1.5,
+                            handler_map={tuple: Stacked()} if stacked else None,
+                            **{**LEGEND, "handleheight": 1.9} if stacked else LEGEND)
+        if stacked:   # a taller row: the next one starts right under it
+            box = legend.get_window_extent(fig.canvas.get_renderer())
+            top = (box.y0 - fig.bbox.y0) / fig.bbox.height + 0.005
+        else:
+            top -= 0.075
 
 
 def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
@@ -343,7 +375,7 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
         right.plot(range(1, len(loss) + 1), loss, color=colour, linewidth=1.0, solid_capstyle="round")
     right.set_ylim(0, 12.5)
     fig.tight_layout()
-    _legend_below(fig, [(colour, label) for _, colour, label in series], best=True)
+    _legend_below(fig, [(colour, label) for _, colour, label in series], best=True, solid=1.0)
     _save(fig, out_dir, CURVE_FIGURES[4])
     plt.close(fig)
 
