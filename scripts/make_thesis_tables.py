@@ -536,7 +536,7 @@ def selection_results_table(runs_dir: Path) -> Table:
     for run in STAGES[1][1]:
         config = run_config(runs_dir, run)
         sampler = {"random": "RAND", "pk": "PK", "pk_sa": "PK-SA"}[config["sampler"]["name"]]
-        miner = {"batch-hard": "BH", "semi-hard": "SH", "none": "wszystkie dostępne"}[
+        miner = {"batch-hard": "BH", "semi-hard": "SH", "none": "wszystkie"}[
             config["loss"].get("miner", "batch-hard")]
         labels = [selection_code(config), sampler, miner, "tak" if config["loss"].get("xbm") else "nie"]
         labelled.append((labels, scores(runs_dir, run)))
@@ -547,7 +547,7 @@ def selection_results_table(runs_dir: Path) -> Table:
         "wyniki-dobor",
         "Wyniki wariantów doboru przykładów na zbiorze walidacyjnym "
         "(\\emph{ResNet-18}, strata trójkowa, AUG-MIN, 40 epok)",
-        "ll" + par(0.13) + "lrrrr",
+        "llllrrrr",   # natural widths keep every header and cell on one line
         [["Wariant", "Próbkowanie", "Dobór trójek", "XBM", *METRIC_HEADER]], rows,
         arraystretch=1.18, tabcolsep=4.5,
     )

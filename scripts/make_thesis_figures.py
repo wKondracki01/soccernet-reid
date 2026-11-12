@@ -156,7 +156,7 @@ def draw_ladder(runs: dict[str, dict], runs_dir: Path, out_dir: Path) -> None:
 
 # One file per learning-curve figure, so that each can sit in the section it belongs to.
 CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa",
-                 "krzywe_ustawienia_strat", "krzywe_odniesienie")
+                 "krzywe_ustawienia_strat", "krzywe_odniesienie", "krzywe_dobor")
 
 
 def _curve_style(ax, xlabel: str = "epoka", ylabel: str | None = "mAP",
@@ -377,6 +377,25 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     fig.tight_layout()
     _legend_below(fig, [(colour, label) for _, colour, label in series], best=True, solid=1.0)
     _save(fig, out_dir, CURVE_FIGURES[4])
+    plt.close(fig)
+
+    # stage 1 on ResNet-18: batch-hard, semi-hard and batch-hard with XBM, one panel per sampler on one
+    # mAP scale; the random sampler stays close to the untrained network and is left out
+    fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.7), sharey=True)
+    selection = ((CURVE_1, "dobór BH"), (CURVE_2, "dobór SH"), (CURVE_3, "dobór BH i pamięć XBM"))
+    samplers = (("Próbkowanie PK", ("G1_PK_BH", "G1_PK_SH", "G1_PK_BH_XBM")),
+                ("Próbkowanie PK-SA", ("G1_PK_SA_BH", "G1_PK_SA_SH", "G1_PK_SA_BH_XBM")))
+    for ax, (title, names) in zip(axes, samplers, strict=True):
+        _curve_style(ax, ylabel="mAP" if ax is axes[0] else None, title=title)
+        _comma_axis(ax, step=0.05)
+        ax.set_xticks(list(range(0, 41, 10)))
+        ax.set_xlim(0, 42)
+        for name, (colour, _) in zip(names, selection, strict=True):
+            _curve_line(ax, runs[name], colour)
+    axes[0].set_ylim(0.54, 0.77)
+    fig.tight_layout()
+    _legend_below(fig, list(selection), best=True)
+    _save(fig, out_dir, CURVE_FIGURES[5])
     plt.close(fig)
 
 
