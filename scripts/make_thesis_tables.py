@@ -155,6 +155,8 @@ class Table:
     size: str = "\\small"
     long: bool = False              # longtable that may break across pages
     notes: str = ""
+    arraystretch: float | None = None
+    tabcolsep: float | None = None   # local column padding in points
 
 
 _MULTICOLUMN = re.compile(r"^\\multicolumn\{(\d+)\}")
@@ -197,9 +199,13 @@ def render(table: Table) -> str:
 
     head = [line(r) for r in table.header]
     body = [line(r) for r in table.rows]
+    spacing = ([f"\\renewcommand{{\\arraystretch}}{{{table.arraystretch:g}}}"]
+               if table.arraystretch is not None else [])
     if table.long:
+        column_padding = table.tabcolsep if table.tabcolsep is not None else 3
         out = [
-            "{" + table.size, "\\setlength{\\tabcolsep}{3pt}", f"\\begin{{longtable}}{{{table.spec}}}",
+            "{" + table.size, *spacing, f"\\setlength{{\\tabcolsep}}{{{column_padding:g}pt}}",
+            f"\\begin{{longtable}}{{{table.spec}}}",
             f"\\caption{{{table.caption}}}\\label{{tab:{table.name}}} \\\\",
             "\\hline", *head, "\\hline", "\\endfirsthead",
             "\\hline", *head, "\\hline", "\\endhead",
@@ -207,9 +213,11 @@ def render(table: Table) -> str:
             *body, "\\end{longtable}", "}",
         ]
     else:
+        if table.tabcolsep is not None:
+            spacing.append(f"\\setlength{{\\tabcolsep}}{{{table.tabcolsep:g}pt}}")
         out = [
             "\\begin{table}[!htbp]", "\\centering", f"\\caption{{{table.caption}}}", f"\\label{{tab:{table.name}}}",
-            table.size, f"\\begin{{tabular}}{{{table.spec}}}",
+            table.size, *spacing, f"\\begin{{tabular}}{{{table.spec}}}",
             "\\hline", *head, "\\hline", *body, "\\hline", "\\end{tabular}", "\\end{table}",
         ]
         if table.notes:
@@ -522,6 +530,29 @@ def reference_points_table(runs_dir: Path, untrained: dict) -> Table:
     )
 
 
+def selection_results_table(runs_dir: Path) -> Table:
+    """The seven stage-one configurations, ordered by their saved validation mAP."""
+    labelled = []
+    for run in STAGES[1][1]:
+        config = run_config(runs_dir, run)
+        sampler = {"random": "RAND", "pk": "PK", "pk_sa": "PK-SA"}[config["sampler"]["name"]]
+        miner = {"batch-hard": "BH", "semi-hard": "SH", "none": "wszystkie dostępne"}[
+            config["loss"].get("miner", "batch-hard")]
+        labels = [selection_code(config), sampler, miner, "tak" if config["loss"].get("xbm") else "nie"]
+        labelled.append((labels, scores(runs_dir, run)))
+    labelled.sort(key=lambda row: -row[1][0])
+    cells = metric_cells([values for _, values in labelled])
+    rows = [[*labels, *values] for (labels, _), values in zip(labelled, cells, strict=True)]
+    return Table(
+        "wyniki-dobor",
+        "Wyniki wariantów doboru przykładów na zbiorze walidacyjnym "
+        "(\\emph{ResNet-18}, strata trójkowa, AUG-MIN, 40 epok)",
+        "ll" + par(0.13) + "lrrrr",
+        [["Wariant", "Próbkowanie", "Dobór trójek", "XBM", *METRIC_HEADER]], rows,
+        arraystretch=1.18, tabcolsep=4.5,
+    )
+
+
 def computational_cost_table(speed: dict) -> Table:
     by_code = {result["backbone"]: result for result in speed["results"]}
     rows = [[name, pl(by_code[code]["latency_ms_single_image"], 2),
@@ -552,17 +583,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     tables.append(reference_points_table(runs_dir, untrained))
 
     # stage 1
-    stage1 = []
-    for run in STAGES[1][1]:
-        config = run_config(runs_dir, run)
-        sampler = {"random": "losowy", "pk": "PK", "pk_sa": "PK-SA"}[config["sampler"]["name"]]
-        miner = {"batch-hard": "batch-hard", "semi-hard": "semi-hard", "none": "wszystkie trójki"}[
-            config["loss"].get("miner", "batch-hard")]
-        stage1.append(([selection_code(config), sampler, miner, "tak" if config["loss"].get("xbm") else "nie"], run))
-    tables.append(table_of_runs(
-        "wyniki-dobor",
-        "Wyniki wariantów doboru przykładów na zbiorze walidacyjnym (ResNet-18, strata trójkowa, AUG-MIN, 40 epok)",
-        "llllrrrr", ["Wariant", "Sampler", "Wybór trójek", "XBM", *METRIC_HEADER], stage1))
+    tables.append(selection_results_table(runs_dir))
 
     # stage 2: every loss in the better of its computed settings, then the effect of the settings
     stage2 = [
