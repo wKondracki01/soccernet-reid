@@ -77,11 +77,12 @@ def test_learning_curves_are_saved_as_six_separate_figures(tmp_path) -> None:
 
     matplotlib.use("Agg")
     script = _load_script()
-    names = ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", "G2_CE", "G2_CE_WD", *script.BASE_SEEDS, *script.FINAL_SEEDS,
+    names = ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", *script.BASE_SEEDS, *script.FINAL_SEEDS,
              "G2_MS", "G2_MS_B05", "G2_CIRCLE", "G2_CIRCLE_M04",
              "G1_PK_BH", "G1_PK_SH", "G1_PK_BH_XBM", "G1_PK_SA_SH", "G1_PK_SA_BH_XBM")
     runs = {name: _run(0.8, [0.70, 0.75, 0.78, 0.80]) for name in names}
-    for name in ("G0b_variant_K", "G0c_variant_K_WD"):    # the reference figure also plots the training loss
+    # the reference figure and the classification figure also plot the training loss
+    for name in ("G0b_variant_K", "G0c_variant_K_WD", "G2_CE", "G2_CE_WD", "G2_ARC", "G2_ARC_WD"):
         runs[name] = dict(_run(0.5, [0.47, 0.46, 0.45]), train_loss_epoch=[11.8, 9.4, 6.3, 4.7])
     script.draw_curves(runs, tmp_path)
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(

@@ -51,6 +51,7 @@ DASH = (0, (4.5, 3))                       # in units of the line width
 # (a 15% tint of the blue is close to their blue fill). Checked with the colour-vision and contrast
 # checks of the dataviz palette validator against white: all pairs pass.
 CURVE_1, CURVE_2, CURVE_3 = "#356fa8", "#cf6f3c", "#2c9b84"
+REFERENCE = "#8E979F"   # neutral grey of a reference curve drawn under the compared series
 
 FINAL_SEEDS = ("G5_STRONG", "G5_STRONG_S1", "G5_STRONG_S2")
 BASE_SEEDS = ("G5_REF", "G5_REF_S1", "G5_REF_S2")
@@ -309,13 +310,32 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     finish(fig, ax, CURVE_FIGURES[0], 0, 42,
            lambda f: _legend_below(f, [(colour, label) for _, colour, label in augment], best=True))
 
-    # cross-entropy on ResNet-18 with and without weight decay, evaluated after every epoch
-    fig, ax = _curve_axes(0.05, range(0, 41, 10))
-    for name, colour in (("G2_CE", CURVE_1), ("G2_CE_WD", CURVE_2)):
-        _curve_line(ax, runs[name], colour)
-    finish(fig, ax, CURVE_FIGURES[1], 0, 41,
-           lambda f: _legend_below(f, [(CURVE_1, "bez regularyzacji wag"), (CURVE_2, "z regularyzacją wag")],
-                                   best=True))
+    # both classification losses of stage 2 on ResNet-18, with and without weight decay, one row each:
+    # validation mAP after every epoch next to the mean training loss of every epoch (a continuous line)
+    fig, axes = plt.subplots(2, 2, figsize=(TEXT_WIDTH_IN, 5.0))
+    classification = (
+        ("Entropia krzyżowa", ("G2_CE", "G2_CE_WD"), (0.30, 0.57), 12.5, 2),
+        ("ArcFace", ("G2_ARC", "G2_ARC_WD"), (0.27, 0.67), 29, 5),
+    )
+    weight_decay = ((CURVE_1, "bez regularyzacji wag"), (CURVE_2, "z regularyzacją wag"))
+    for (loss_name, pair, map_limits, loss_top, loss_step), (left, right) in zip(classification, axes, strict=True):
+        _curve_style(left, ylabel=None, title=f"{loss_name}: mAP")
+        _curve_style(right, ylabel=None, title=f"{loss_name}: strata treningowa")
+        for ax in (left, right):
+            ax.set_xticks(list(range(0, 41, 10)))
+            ax.set_xlim(0, 41)
+        _comma_axis(left, step=0.05)
+        _comma_axis(right, digits=0, step=loss_step)
+        for name, (colour, _) in zip(pair, weight_decay, strict=True):
+            _curve_line(left, runs[name], colour)
+            loss = [float(v) for v in runs[name]["train_loss_epoch"]]
+            right.plot(range(1, len(loss) + 1), loss, color=colour, linewidth=1.0, solid_capstyle="round")
+        left.set_ylim(*map_limits)
+        right.set_ylim(0, loss_top)
+    fig.tight_layout(h_pad=1.2)
+    _legend_below(fig, list(weight_decay), best=True, solid=1.0)
+    _save(fig, out_dir, CURVE_FIGURES[1])
+    plt.close(fig)
 
     # final configuration against the same setup with AUG-MED on ResNet-34 from epoch 10: the mean of
     # the three seeds of each, with a band from the lowest to the highest of them at every evaluation;
@@ -335,7 +355,10 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
                                    extra=[(band, "zakres trzech treningów")]))
 
     # Multi-Similarity and Circle on ResNet-18, each in both settings of stage 2, side by side on one
-    # mAP scale; each panel names its settings, the open circle is explained once under both
+    # mAP scale, over the triplet loss kept from stage 1 as a grey reference; each panel names its
+    # settings, the open circle and the reference are explained once under both
+    from matplotlib.lines import Line2D
+
     fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.7), sharey=True)
     panels = (
         ("Multi-Similarity", (("G2_MS", CURVE_1, "$\\lambda = 1$"), ("G2_MS_B05", CURVE_2, "$\\lambda = 0{,}5$"))),
@@ -347,12 +370,14 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
         _comma_axis(ax, step=0.05)
         ax.set_xticks(list(range(0, 41, 10)))
         ax.set_xlim(0, 42)
+        _curve_line(ax, runs["G1_PK_SA_BH"], REFERENCE, mark_best=False, zorder=1)
         for name, colour, _ in series:
             _curve_line(ax, runs[name], colour)
         _curve_legend(ax, [(colour, label) for _, colour, label in series])
     axes[0].set_ylim(0.52, 0.77)
     fig.tight_layout()
-    _legend_below(fig, [], best=True)
+    reference = Line2D([0], [0], **_measured(REFERENCE, 1))
+    _legend_below(fig, [], best=True, extra=[(reference, "strata trójkowa (margines 0,3)")])
     _save(fig, out_dir, CURVE_FIGURES[3])
     plt.close(fig)
 
