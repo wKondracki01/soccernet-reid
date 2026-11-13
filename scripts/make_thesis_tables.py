@@ -157,6 +157,7 @@ class Table:
     notes: str = ""
     arraystretch: float | None = None
     tabcolsep: float | None = None   # local column padding in points
+    width: str | None = None         # stretch the tabular to this width (tabular*), e.g. as wide as the note
 
 
 _MULTICOLUMN = re.compile(r"^\\multicolumn\{(\d+)\}")
@@ -215,10 +216,17 @@ def render(table: Table) -> str:
     else:
         if table.tabcolsep is not None:
             spacing.append(f"\\setlength{{\\tabcolsep}}{{{table.tabcolsep:g}pt}}")
+        if table.width is None:
+            begin, end = f"\\begin{{tabular}}{{{table.spec}}}", "\\end{tabular}"
+        else:
+            # the extra width goes between the columns; the outer padding stays as in a plain tabular
+            begin = (f"\\begin{{tabular*}}{{{table.width}}}"
+                     f"{{@{{\\hspace{{\\tabcolsep}}\\extracolsep{{\\fill}}}}{table.spec}}}")
+            end = "\\end{tabular*}"
         out = [
             "\\begin{table}[!htbp]", "\\centering", f"\\caption{{{table.caption}}}", f"\\label{{tab:{table.name}}}",
-            table.size, *spacing, f"\\begin{{tabular}}{{{table.spec}}}",
-            "\\hline", *head, "\\hline", *body, "\\hline", "\\end{tabular}", "\\end{table}",
+            table.size, *spacing, begin,
+            "\\hline", *head, "\\hline", *body, "\\hline", end, "\\end{table}",
         ]
         if table.notes:
             out.insert(-1, "\\par\\smallskip\\begin{minipage}{0.97\\linewidth}\\footnotesize "
@@ -593,9 +601,9 @@ def loss_results_tables(runs_dir: Path, bootstrap: dict[str, dict]) -> list[Tabl
         "Wyniki funkcji straty na zbiorze walidacyjnym w~ustawieniach o~najwyższym mAP "
         "(\\emph{ResNet-18}, AUG-MIN, 40 epok)",
         "llrrrr", [["Funkcja straty", "Ustawienie", *METRIC_HEADER]],
-        best_rows, arraystretch=1.18, tabcolsep=4.5,
+        best_rows, arraystretch=1.18, tabcolsep=4.5, width="0.97\\linewidth",
         notes="Warianty metryczne uczono z~próbkowaniem PK-SA i~bez regularyzacji wag, "
-              "a~klasyfikacyjne z~próbkowaniem RAND.",
+              "a~klasyfikacyjne z~RAND.",
     )
     pairs = [
         ("Kontrastywna", "$m_-=0{,}5$", "G2_CONT", "$m_-=1{,}0$", "G2_CONT_M1"),

@@ -80,6 +80,13 @@ def test_render_refuses_a_row_that_does_not_fill_the_columns() -> None:
         script.render(script.Table("t", "Podpis", "lrr", [["a", "b", "c"]], [["x", "1"]]))
 
 
+def test_a_table_with_a_width_is_stretched_between_its_columns() -> None:
+    script = _load_script()
+    text = script.render(script.Table("t", "Podpis", "lr", [["a", "b"]], [["x", "1"]], width="0.97\\linewidth"))
+    assert "\\begin{tabular*}{0.97\\linewidth}{@{\\hspace{\\tabcolsep}\\extracolsep{\\fill}}lr}" in text
+    assert "\\end{tabular*}" in text and "\\begin{tabular}" not in text
+
+
 def test_long_table_repeats_its_header() -> None:
     script = _load_script()
     text = script.render(script.Table("t", "Podpis", "lr", [["a", "b"]], [["x", "1"]], long=True))
