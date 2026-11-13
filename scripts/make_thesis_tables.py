@@ -570,23 +570,32 @@ def computational_cost_table(speed: dict) -> Table:
 
 def loss_results_tables(runs_dir: Path, bootstrap: dict[str, dict]) -> list[Table]:
     """The loss comparison and its paired settings, using saved validation results only."""
-    labelled = [
+    metric = [
         (["Circle", "$(m,\\gamma)=(0{,}4;\\,80)$"], "G2_CIRCLE_M04"),
         (["Trójkowa", "margines $0{,}3$"], "G1_PK_SA_BH"),
         (["Multi-Similarity", "$\\lambda=0{,}5$"], "G2_MS_B05"),
         (["Kontrastywna", "$m_-=1{,}0$"], "G2_CONT_M1"),
+    ]
+    classification = [
         (["ArcFace", "z~regularyzacją wag"], "G2_ARC_WD"),
         (["Entropia krzyżowa", "z~regularyzacją wag"], "G2_CE_WD"),
     ]
-    labelled.sort(key=lambda item: -scores(runs_dir, item[1])[0])
+    # each group from the highest mAP down; the line between the groups marks the change of sampling
+    # and weight decay that the note under the table names
+    groups = [sorted(group, key=lambda item: -scores(runs_dir, item[1])[0]) for group in (metric, classification)]
+    labelled = [item for group in groups for item in group]
     cells = metric_cells([scores(runs_dir, run) for _, run in labelled])
+    best_rows: list[list[str] | None] = [
+        [*labels, *values] for (labels, _), values in zip(labelled, cells, strict=True)]
+    best_rows.insert(len(groups[0]), None)
     best = Table(
         "wyniki-straty",
         "Wyniki funkcji straty na zbiorze walidacyjnym w~ustawieniach o~najwyższym mAP "
         "(\\emph{ResNet-18}, AUG-MIN, 40 epok)",
         "llrrrr", [["Funkcja straty", "Ustawienie", *METRIC_HEADER]],
-        [[*labels, *values] for (labels, _), values in zip(labelled, cells, strict=True)],
-        arraystretch=1.18, tabcolsep=4.5,
+        best_rows, arraystretch=1.18, tabcolsep=4.5,
+        notes="Warianty metryczne uczono z~próbkowaniem PK-SA i~bez regularyzacji wag, "
+              "a~klasyfikacyjne z~próbkowaniem RAND.",
     )
     pairs = [
         ("Kontrastywna", "$m_-=0{,}5$", "G2_CONT", "$m_-=1{,}0$", "G2_CONT_M1"),
