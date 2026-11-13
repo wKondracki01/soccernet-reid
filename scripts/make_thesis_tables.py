@@ -611,13 +611,11 @@ def loss_results_tables(runs_dir: Path, bootstrap: dict[str, dict]) -> list[Tabl
         "Wpływ ustawień funkcji straty na mAP i~geometrię wektorów cech na zbiorze walidacyjnym",
         "llrrrr", [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "$D_{\\mathrm{ef}}$", "Różnica mAP [pp]"]],
         rows[:-1], arraystretch=1.18, tabcolsep=3,
+        # both statistics are defined in the thesis section on image representation, so the note only
+        # says which vectors they were computed from
         notes="Różnica mAP dotyczy drugiego ustawienia względem pierwszego, z~95-procentowym przedziałem ufności. "
-              "Regularyzację wag stosowano ze współczynnikiem $5\\cdot10^{-4}$. "
-              "Statystyki wektorów dotyczą najlepszych modeli z~każdego treningu, po normalizacji L2. "
-              "Kosinus uśredniono po wszystkich parach różnych wycinków walidacyjnych, także z~różnych akcji. "
-              "Wymiarowość efektywną obliczono jako $D_{\\mathrm{ef}}=(\\sum_i \\nu_i)^2/\\sum_i \\nu_i^2$, "
-              "gdzie $\\nu_i$ są wartościami własnymi macierzy kowariancji wektorów po odjęciu średniej. "
-              "Większa wartość wskazuje na mniejszą koncentrację wariancji w~niewielu kierunkach.",
+              "Średni kosinus i~$D_{\\mathrm{ef}}$ obliczono dla wszystkich wycinków walidacyjnych na podstawie "
+              "wektorów cech po normalizacji L2, uzyskanych z~najlepszego zapisu modelu z~każdego treningu.",
     )
     return [best, settings]
 
