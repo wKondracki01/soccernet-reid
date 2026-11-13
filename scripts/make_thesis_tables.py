@@ -568,6 +568,60 @@ def computational_cost_table(speed: dict) -> Table:
     )
 
 
+def loss_results_tables(runs_dir: Path, bootstrap: dict[str, dict]) -> list[Table]:
+    """The loss comparison and its paired settings, using saved validation results only."""
+    labelled = [
+        (["Circle", "$(m,\\gamma)=(0{,}4;\\,80)$"], "G2_CIRCLE_M04"),
+        (["Trójkowa", "margines $0{,}3$"], "G1_PK_SA_BH"),
+        (["Multi-Similarity", "$\\lambda=0{,}5$"], "G2_MS_B05"),
+        (["Kontrastywna", "$m_-=1{,}0$"], "G2_CONT_M1"),
+        (["ArcFace", "z~regularyzacją wag"], "G2_ARC_WD"),
+        (["Entropia krzyżowa", "z~regularyzacją wag"], "G2_CE_WD"),
+    ]
+    labelled.sort(key=lambda item: -scores(runs_dir, item[1])[0])
+    cells = metric_cells([scores(runs_dir, run) for _, run in labelled])
+    best = Table(
+        "wyniki-straty",
+        "Wyniki funkcji straty na zbiorze walidacyjnym w~ustawieniach o~najwyższym mAP "
+        "(\\emph{ResNet-18}, AUG-MIN, 40 epok)",
+        "llrrrr", [["Funkcja straty", "Ustawienie", *METRIC_HEADER]],
+        [[*labels, *values] for (labels, _), values in zip(labelled, cells, strict=True)],
+        arraystretch=1.18, tabcolsep=4.5,
+    )
+    pairs = [
+        ("Kontrastywna", "$m_-=0{,}5$", "G2_CONT", "$m_-=1{,}0$", "G2_CONT_M1"),
+        ("Multi-Similarity", "$\\lambda=1{,}0$", "G2_MS", "$\\lambda=0{,}5$", "G2_MS_B05"),
+        ("Circle", "$(m,\\gamma)=(0{,}25;\\,64)$", "G2_CIRCLE",
+         "$(m,\\gamma)=(0{,}4;\\,80)$", "G2_CIRCLE_M04"),
+        ("Entropia krzyżowa", "bez regularyzacji wag", "G2_CE", "z~regularyzacją wag", "G2_CE_WD"),
+        ("ArcFace", "bez regularyzacji wag", "G2_ARC", "z~regularyzacją wag", "G2_ARC_WD"),
+    ]
+    rows: list[list[str] | None] = []
+    for loss, first_label, first, second_label, second in pairs:
+        delta, low, high = difference(bootstrap, second, first)
+        for k, (label, run) in enumerate(((first_label, first), (second_label, second))):
+            cosine, dimension = embedding_geometry(runs_dir, run)
+            rows.append([
+                loss if k == 0 else "", label, pl(scores(runs_dir, run)[0]), pl(cosine, 2), pl(dimension, 1),
+                "" if k == 0 else f"{points(delta)} {interval(low, high)}",
+            ])
+        rows.append(None)
+    settings = Table(
+        "wyniki-ustawienia-strat",
+        "Wpływ ustawień funkcji straty na mAP i~geometrię wektorów cech na zbiorze walidacyjnym",
+        "llrrrr", [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "$D_{\\mathrm{ef}}$", "Różnica mAP [pp]"]],
+        rows[:-1], arraystretch=1.18, tabcolsep=3,
+        notes="Różnica mAP dotyczy drugiego ustawienia względem pierwszego, z~95-procentowym przedziałem ufności. "
+              "Regularyzację wag stosowano ze współczynnikiem $5\\cdot10^{-4}$. "
+              "Statystyki wektorów dotyczą najlepszych modeli z~każdego treningu, po normalizacji L2. "
+              "Kosinus uśredniono po wszystkich parach różnych wycinków walidacyjnych, także z~różnych akcji. "
+              "Wymiarowość efektywną obliczono jako $D_{\\mathrm{ef}}=(\\sum_i \\nu_i)^2/\\sum_i \\nu_i^2$, "
+              "gdzie $\\nu_i$ są wartościami własnymi macierzy kowariancji wektorów po odjęciu średniej. "
+              "Większa wartość wskazuje na mniejszą koncentrację wariancji w~niewielu kierunkach.",
+    )
+    return [best, settings]
+
+
 def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, dict], speed: dict,
                   untrained: dict) -> list[Table]:
     def table_of_runs(name: str, caption: str, spec: str, header: list[str], labelled: list[tuple[list[str], str]],
@@ -585,46 +639,8 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     # stage 1
     tables.append(selection_results_table(runs_dir))
 
-    # stage 2: every loss in the better of its computed settings, then the effect of the settings
-    stage2 = [
-        (["Circle", "$m = 0{,}4$, $\\gamma = 80$"], "G2_CIRCLE_M04"),
-        (["trójkowa", "margines 0,3"], "G1_PK_SA_BH"),
-        (["multi-similarity", "$\\lambda = 0{,}5$"], "G2_MS_B05"),
-        (["kontrastywna", "margines 1,0"], "G2_CONT_M1"),
-        (["ArcFace", "z regularyzacją wag"], "G2_ARC_WD"),
-        (["entropia krzyżowa", "z regularyzacją wag"], "G2_CE_WD"),
-    ]
-    tables.append(table_of_runs(
-        "wyniki-straty",
-        "Wyniki funkcji straty na zbiorze walidacyjnym, każda w~lepszym z~dwóch zbadanych ustawień "
-        "(ResNet-18, AUG-MIN, 40 epok)", "llrrrr", ["Funkcja straty", "Ustawienie", *METRIC_HEADER], stage2))
-
-    pairs = [
-        ("kontrastywna", "margines 0,5", "G2_CONT", "margines 1,0", "G2_CONT_M1"),
-        ("multi-similarity", "$\\lambda = 1$", "G2_MS", "$\\lambda = 0{,}5$", "G2_MS_B05"),
-        ("Circle", "$m = 0{,}25$, $\\gamma = 64$", "G2_CIRCLE", "$m = 0{,}4$, $\\gamma = 80$", "G2_CIRCLE_M04"),
-        ("entropia krzyżowa", "bez regularyzacji wag", "G2_CE", "z regularyzacją wag", "G2_CE_WD"),
-        ("ArcFace", "bez regularyzacji wag", "G2_ARC", "z regularyzacją wag", "G2_ARC_WD"),
-    ]
-    setting_rows: list[list[str] | None] = []
-    for loss, first_label, first, second_label, second in pairs:
-        delta, low, high = difference(bootstrap, second, first)
-        for k, (label, run) in enumerate(((first_label, first), (second_label, second))):
-            cosine, dimension = embedding_geometry(runs_dir, run)
-            values = scores(runs_dir, run)
-            setting_rows.append([
-                loss if k == 0 else "", label, pl(values[0]), pl(cosine, 2), pl(dimension, 1),
-                "" if k == 0 else f"{points(delta)} {interval(low, high)}",
-            ])
-        setting_rows.append(None)
-    tables.append(Table(
-        "wyniki-ustawienia-strat",
-        "Wpływ ustawień funkcji straty na mAP na zbiorze walidacyjnym i~na rozkład wektorów cech (kosinus: średnie "
-        "podobieństwo kosinusowe wektorów cech różnych wycinków, wymiarowość: wymiarowość efektywna, różnica mAP "
-        "z~95-procentowym przedziałem ufności)",
-        par(0.18) + par(0.16) + "rrr" + par(0.18),
-        [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "Wymiarowość", "Różnica mAP [pp]"]],
-        setting_rows[:-1]))
+    # stage 2
+    tables.extend(loss_results_tables(runs_dir, bootstrap))
 
     # stage 3
     stage3_runs = ["G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", "G3_AUG_BOT"]
