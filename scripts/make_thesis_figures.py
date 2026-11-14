@@ -361,7 +361,7 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
 
     fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.7), sharey=True)
     panels = (
-        ("Multi-Similarity", (("G2_MS", CURVE_1, "$\\lambda = 1$"), ("G2_MS_B05", CURVE_2, "$\\lambda = 0{,}5$"))),
+        ("Multi-Similarity", (("G2_MS", CURVE_1, "$\\lambda = 1{,}0$"), ("G2_MS_B05", CURVE_2, "$\\lambda = 0{,}5$"))),
         ("Circle", (("G2_CIRCLE", CURVE_1, "$(m, \\gamma) = (0{,}25;\\,64)$"),
                     ("G2_CIRCLE_M04", CURVE_2, "$(m, \\gamma) = (0{,}4;\\,80)$"))),
     )
