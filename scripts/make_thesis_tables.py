@@ -625,12 +625,13 @@ def loss_results_tables(runs_dir: Path, bootstrap: dict[str, dict]) -> list[Tabl
         rows.append(None)
     settings = Table(
         "wyniki-ustawienia-strat",
-        "Wpływ ustawień funkcji straty na mAP i~geometrię wektorów cech na zbiorze walidacyjnym",
+        "Wpływ ustawień funkcji straty na mAP i~rozmieszczenie wektorów cech na zbiorze walidacyjnym "
+        "(\\emph{ResNet-18}, AUG-MIN, 40 epok)",
         "llrrrr", [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "$D_{\\mathrm{ef}}$", "Różnica mAP [pp]"]],
-        rows[:-1], arraystretch=1.18, tabcolsep=3,
+        rows[:-1], arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
         # both statistics are defined in the thesis section on image representation, so the note only
         # says which vectors they were computed from
-        notes="Różnica mAP dotyczy drugiego ustawienia względem pierwszego, z~95-procentowym przedziałem ufności. "
+        notes="Różnica mAP dotyczy drugiego ustawienia względem pierwszego z~95-procentowym przedziałem ufności. "
               "Średni kosinus i~$D_{\\mathrm{ef}}$ obliczono dla wszystkich wycinków walidacyjnych na podstawie "
               "wektorów cech po normalizacji L2, uzyskanych z~najlepszego zapisu modelu z~każdego treningu.",
     )
