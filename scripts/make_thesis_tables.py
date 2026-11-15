@@ -662,11 +662,20 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     stage3_runs = ["G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", "G3_AUG_BOT"]
     stage3 = [([AUGMENT_LABELS[run_config(runs_dir, run)["transform"]["level"]]], run) for run in stage3_runs]
     zero = [[pl(100 * runs[run]["zero_loss_frac"], 1)] for run in stage3_runs]
-    tables.append(table_of_runs(
+    stage3_table = table_of_runs(
         "wyniki-augmentacje",
-        "Wyniki zestawów augmentacji na zbiorze walidacyjnym (ResNet-18, strata trójkowa, PK-SA-BH, 40 epok) "
-        "oraz udział kroków treningu, w~których strata była równa zero",
-        "lrrrrr", ["Zestaw", *METRIC_HEADER, "Zerowa strata [\\%]"], stage3, zero))
+        "Wyniki zestawów augmentacji na zbiorze walidacyjnym "
+        "(\\emph{ResNet-18}, strata trójkowa, PK-SA-BH, 40 epok) "
+        "wraz z~udziałem kroków treningu, w~których strata była równa zeru",
+        "lrrrrr", ["Zestaw", *METRIC_HEADER, "Zerowa strata [\\%]"], stage3, zero)
+    stage3_table.arraystretch = 1.18
+    stage3_table.tabcolsep = 4.5
+    stage3_table.width = "0.97\\linewidth"
+    stage3_table.notes = (
+        "Udział kroków z~zerową stratą obliczono dla całego treningu, "
+        "obejmującego 200\\,000 kroków."
+    )
+    tables.append(stage3_table)
 
     # stage 4
     by_code = {r["backbone"]: r for r in speed["results"]}
