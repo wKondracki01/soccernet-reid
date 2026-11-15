@@ -47,6 +47,16 @@ def test_reviews_are_merged_and_a_later_file_wins(tmp_path) -> None:
     assert script.best_map(merged["A"]) == 0.5 and script.best_map(merged["B"]) == 0.7
 
 
+def test_zero_loss_shares_are_added_only_to_their_runs(tmp_path) -> None:
+    script = _load_script()
+    path = tmp_path / script.ZERO_LOSS_FILE
+    path.write_text(json.dumps({"A": {"zero_loss_by_epoch": [0.0, 0.5]}}))
+    runs = {"A": _run(0.7), "B": _run(0.6)}
+    merged = script.with_zero_loss(runs, path)
+    assert merged["A"]["zero_loss_by_epoch"] == [0.0, 0.5] and "zero_loss_by_epoch" not in merged["B"]
+    assert "zero_loss_by_epoch" not in runs["A"]          # the review data are not changed in place
+
+
 def test_curve_returns_epochs_and_map(runs) -> None:
     assert _load_script().curve(runs["G4_EB1"]) == ([5, 10, 15], [0.70, 0.78, 0.77])
 
@@ -84,6 +94,9 @@ def test_learning_curves_are_saved_as_six_separate_figures(tmp_path) -> None:
     # the reference figure and the classification figure also plot the training loss
     for name in ("G0b_variant_K", "G0c_variant_K_WD", "G2_CE", "G2_CE_WD", "G2_ARC", "G2_ARC_WD"):
         runs[name] = dict(_run(0.5, [0.47, 0.46, 0.45]), train_loss_epoch=[11.8, 9.4, 6.3, 4.7])
+    # the augmentation figure also plots the training loss and the share of zero-loss steps
+    for name in ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG"):
+        runs[name].update(train_loss_epoch=[0.36, 0.30, 0.22, 0.10], zero_loss_by_epoch=[0.0, 0.01, 0.2, 0.5])
     script.draw_curves(runs, tmp_path)
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
         f"{name}.{ext}" for name in script.CURVE_FIGURES for ext in ("pdf", "png"))

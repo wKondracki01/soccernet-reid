@@ -2,15 +2,17 @@
 
 Inputs (all written by earlier steps, nothing is trained or evaluated here)
     outputs/_g/REVIEW_*.json   per-run validation curves and best epochs
+    outputs/_g/ZERO_LOSS_BY_EPOCH.json   scripts/zero_loss_by_epoch.py (only for ``curves``)
     outputs/_g/speed.json      scripts/benchmark_speed.py (only for ``cost``)
     outputs/runs/RUN/rerank_valid.json   scripts/eval_rerank.py (only for ``ladder``)
 
 Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     ladder      validation mAP after each step from the starting point to the final model
-    curves      mAP against the epoch, five separate figures: augmentation on ResNet-18,
-                cross-entropy with and without weight decay, final configuration against AUG-MED,
-                Multi-Similarity and Circle in their two settings, and the two cross-entropy
-                reference runs with their training loss
+    curves      learning curves, six separate figures: the augmentation sets on ResNet-18 with their
+                training loss and share of zero-loss steps, both classification losses of stage 2
+                with their training loss, the final configuration against AUG-MED, Multi-Similarity
+                and Circle in their two settings, the two cross-entropy reference runs with their
+                training loss, and the sampling variants of stage 1
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
@@ -68,6 +70,16 @@ def load_reviews(review_dir: Path) -> dict[str, dict]:
     for path in sorted(review_dir.glob("REVIEW_*.json")):
         runs.update(json.loads(path.read_text()))
     return runs
+
+
+ZERO_LOSS_FILE = "ZERO_LOSS_BY_EPOCH.json"     # written by scripts/zero_loss_by_epoch.py
+
+
+def with_zero_loss(runs: dict[str, dict], path: Path) -> dict[str, dict]:
+    """``runs`` with the share of zero-loss steps in every epoch added to the runs that ``path`` holds."""
+    shares = json.loads(path.read_text())
+    return {name: {**run, "zero_loss_by_epoch": shares[name]["zero_loss_by_epoch"]} if name in shares else run
+            for name, run in runs.items()}
 
 
 def curve(run: dict) -> tuple[list[int], list[float]]:
@@ -302,13 +314,35 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
         _save(fig, out_dir, name)
         plt.close(fig)
 
-    # augmentation on ResNet-18: training with flips only stops improving early
-    fig, ax = _curve_axes(0.05, range(0, 41, 10))
-    augment = (("G1_PK_SA_BH", CURVE_1, "AUG-MIN"), ("G3_AUG_MED", CURVE_2, "AUG-MED"), ("G3_AUG_STRONG", CURVE_3, "AUG-STRONG"))
+    # augmentation on ResNet-18, three panels side by side: validation mAP every five epochs, and in
+    # every epoch the mean training loss and the share of steps with zero loss (continuous lines).
+    # With flips only, the loss keeps falling and more and more batches give no gradient while mAP
+    # stays where it was after ten epochs. AUG-COLOR is not drawn, at the author's request.
+    fig, (left, middle, right) = plt.subplots(1, 3, figsize=(TEXT_WIDTH_IN, 2.5))
+    augment = (("G1_PK_SA_BH", CURVE_1, "AUG-MIN"), ("G3_AUG_MED", CURVE_2, "AUG-MED"),
+               ("G3_AUG_STRONG", CURVE_3, "AUG-STRONG"))
+    _curve_style(left, ylabel=None, title="mAP")
+    _curve_style(middle, ylabel=None, title="Strata treningowa")
+    _curve_style(right, ylabel=None, title="Kroki z zerową stratą [%]")
+    for ax in (left, middle, right):
+        ax.set_xticks(list(range(0, 41, 10)))
+        ax.set_xlim(0, 42)
+    _comma_axis(left, step=0.05)
+    _comma_axis(middle, digits=1, step=0.1)
+    _comma_axis(right, digits=0, step=10)
     for name, colour, _ in augment:
-        _curve_line(ax, runs[name], colour)
-    finish(fig, ax, CURVE_FIGURES[0], 0, 42,
-           lambda f: _legend_below(f, [(colour, label) for _, colour, label in augment], best=True))
+        _curve_line(left, runs[name], colour)
+        for ax, values in ((middle, runs[name]["train_loss_epoch"]),
+                           (right, [100 * v for v in runs[name]["zero_loss_by_epoch"]])):
+            ax.plot(range(1, len(values) + 1), [float(v) for v in values], color=colour, linewidth=1.0,
+                    solid_capstyle="round")
+    left.set_ylim(0.58, 0.81)
+    middle.set_ylim(0, 0.4)
+    right.set_ylim(0, 60)
+    fig.tight_layout(w_pad=1.0)
+    _legend_below(fig, [(colour, label) for _, colour, label in augment], best=True, solid=1.0)
+    _save(fig, out_dir, CURVE_FIGURES[0])
+    plt.close(fig)
 
     # both classification losses of stage 2 on ResNet-18, with and without weight decay, one row each:
     # validation mAP after every epoch next to the mean training loss of every epoch (a continuous line)
@@ -664,7 +698,10 @@ def main() -> int:
     if "ladder" in args.only:
         draw_ladder(runs, args.runs, args.out)
     if "curves" in args.only:
-        draw_curves(runs, args.out)
+        zero_loss = args.reviews / ZERO_LOSS_FILE
+        if not zero_loss.exists():
+            raise SystemExit(f"{zero_loss} is missing: run scripts/zero_loss_by_epoch.py first")
+        draw_curves(with_zero_loss(runs, zero_loss), args.out)
     if "dimension" in args.only:
         draw_dimension(runs, args.out)
     if "cost" in args.only:
