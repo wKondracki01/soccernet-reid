@@ -161,3 +161,35 @@ def test_method_tables_are_consistent() -> None:
     names = [name for _, group in script.STAGES for name in group]
     assert len(names) == len(set(names)) == 47
     assert len(plan.rows) == len(script.STAGES)
+
+
+def test_backbone_results_join_speed_by_code_and_sort_by_map(tmp_path) -> None:
+    script = _load_script()
+    speed_rows = []
+    expected = []
+    for i, (code, run) in enumerate(script.BACKBONE_RUNS.items(), start=1):
+        _write_run(tmp_path, run)
+        values = (0.5 + i / 100, 0.4 + i / 100, 0.8 + i / 100, 0.9 + i / 100)
+        (tmp_path / run / "eval_valid.json").write_text(json.dumps({"epoch": i, **dict(zip(script.METRICS, values))}))
+        speed_rows.append({"backbone": code, "parameters": i * 1_000_000,
+                           "inference_images_per_s": i * 1000 + 0.4})
+        expected.append((script.BACKBONES[code][0], f"{i},0", script.num(i * 1000), values))
+    table = script.backbone_results_table(tmp_path, {"results": list(reversed(speed_rows))})
+    for row, (name, parameters, throughput, values) in zip(table.rows, reversed(expected), strict=True):
+        assert row[:3] == [name, parameters, throughput]
+        assert [cell.removeprefix("\\textbf{").removesuffix("}") for cell in row[3:]] == [
+            script.pl(value) for value in values]
+    assert all(cell.startswith("\\textbf{") for cell in table.rows[0][3:])
+    assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[3:])
+    script.render(table)
+
+
+def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
+    script = _load_script()
+    speed_rows = [{"backbone": code, "latency_ms_single_image": i + 0.125,
+                   "train_steps_per_s": i + 10.25}
+                  for i, code in enumerate(script.BACKBONES)]
+    table = script.computational_cost_table({"results": list(reversed(speed_rows))})
+    assert table.rows == [[name, script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
+                          for i, (name, _, _) in enumerate(script.BACKBONES.values())]
+    script.render(table)
