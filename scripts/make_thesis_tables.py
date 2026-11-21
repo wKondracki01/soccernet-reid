@@ -597,7 +597,7 @@ def computational_cost_table(speed: dict) -> Table:
         "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech",
         "lrr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
-              "Pomiary wykonano na karcie graficznej \\emph{NVIDIA GeForce RTX~4090}. "
+              "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
               "Opóźnienie mierzono dla jednego wycinka, a~szybkość kroku uczenia dla partii 16 wycinków, "
               "z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
         arraystretch=1.18, width="0.97\\linewidth",

@@ -196,7 +196,7 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
     assert table.rows == [[name, script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
                           for i, (name, _, _) in enumerate(script.BACKBONES.values())]
     assert table.header[0][0] == "Ekstraktor"
-    assert "RTX" not in table.caption and "karcie graficznej" in table.notes
+    assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here
     # plain columns spread over the width of the note, as in the results table, so that no wide name
     # column pushes the numbers to the right edge
     assert table.spec == "lrr" and table.width == "0.97\\linewidth"
