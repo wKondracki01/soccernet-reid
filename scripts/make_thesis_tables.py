@@ -570,13 +570,18 @@ def backbone_results_table(runs_dir: Path, speed: dict) -> Table:
     rows = [[BACKBONES[code][0], pl(by_code[code]["parameters"] / 1e6, 1),
              num(round(by_code[code]["inference_images_per_s"])), *values]
             for (code, _), values in zip(labelled, cells, strict=True)]
+    # the caption keeps the training settings, which concern the scores only; how the parameters were
+    # counted and the throughput measured goes into the note, as under the other tables of chapter 5;
+    # "Ekstraktor" heads the first column as in the chapter 4 tables, since "+ fc" rows are variants
     return Table(
         "wyniki-ekstraktory",
         "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok) "
-        "oraz ich koszt: liczba parametrów i~liczba wycinków przetwarzanych w~ciągu sekundy przy partii 64 "
-        "na karcie \\emph{NVIDIA GeForce RTX~4090}",
-        "lrrrrrr", [["Sieć", "Parametry [mln]", "Wycinki/s", *METRIC_HEADER]], rows,
-        arraystretch=1.18, tabcolsep=4.5,
+        "wraz z~liczbą parametrów i~przepustowością",
+        "lrrrrrr", [["Ekstraktor", "Parametry [mln]", "Wycinki/s", *METRIC_HEADER]], rows,
+        notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
+              "Przepustowość, czyli liczbę wycinków przetwarzanych w~ciągu sekundy, zmierzono dla partii "
+              "64 wycinków na karcie \\emph{NVIDIA GeForce RTX~4090}.",
+        arraystretch=1.18, tabcolsep=4.5, width="0.97\\linewidth",
     )
 
 
@@ -587,9 +592,10 @@ def computational_cost_table(speed: dict) -> Table:
             for code, (name, _, _) in BACKBONES.items()]
     return Table(
         "koszt-ekstraktorow",
-        "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech na karcie \\emph{NVIDIA GeForce RTX~4090}",
-        par(0.55) + "rr", [["Sieć", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
+        "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech",
+        par(0.55) + "rr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
+              "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
               "Opóźnienie mierzono dla jednego wycinka, a~szybkość kroku uczenia dla partii 16 wycinków, "
               "z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
         arraystretch=1.18, width="0.97\\linewidth",
