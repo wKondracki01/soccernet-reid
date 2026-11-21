@@ -197,7 +197,7 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
                           for i, (name, _, _) in enumerate(script.BACKBONES.values())]
     assert table.header[0][0] == "Ekstraktor"
     assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here
-    # plain columns spread over the width of the note, as in the results table, so that no wide name
-    # column pushes the numbers to the right edge
-    assert table.spec == "lrr" and table.width == "0.97\\linewidth"
+    # stretched to the width of the note, as the results table; the name column keeps the width the author
+    # chose (0.35), narrow enough that the latency column does not end up against the last one
+    assert table.spec == script.par(0.35) + "rr" and table.width == "0.97\\linewidth"
     script.render(table)

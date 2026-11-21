@@ -590,12 +590,13 @@ def computational_cost_table(speed: dict) -> Table:
     rows = [[name, pl(by_code[code]["latency_ms_single_image"], 2),
              pl(by_code[code]["train_steps_per_s"], 1)]
             for code, (name, _, _) in BACKBONES.items()]
-    # three plain columns spread over the width of the note, as in the results table above it; a wide
-    # paragraph column for the names pushed both numbers to the right edge and left the middle empty
+    # stretched to the width of the note, as the results table above it; the fixed width of the name column
+    # sets where the latency column stands: 0.55 pushed it against the last column and left the middle empty,
+    # plain l spread the columns evenly, and 0.35 (the author's choice) puts it a little right of the middle
     return Table(
         "koszt-ekstraktorow",
         "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech",
-        "lrr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
+        par(0.35) + "rr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
               "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
               "Opóźnienie mierzono dla jednego wycinka, a~szybkość kroku uczenia dla partii 16 wycinków, "
