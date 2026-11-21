@@ -81,7 +81,7 @@ def test_ladder_adds_reranking_only_when_all_three_seeds_have_it(runs, tmp_path)
     assert len(steps) == 6 and steps[-1][1] == pytest.approx(0.832)
 
 
-def test_learning_curves_are_saved_as_six_separate_figures(tmp_path) -> None:
+def test_learning_curves_are_saved_as_seven_separate_figures(tmp_path) -> None:
     pytest.importorskip("matplotlib")
     import matplotlib
 
@@ -97,10 +97,26 @@ def test_learning_curves_are_saved_as_six_separate_figures(tmp_path) -> None:
     # the augmentation figure also plots the training loss and the share of zero-loss steps
     for name in ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG"):
         runs[name].update(train_loss_epoch=[0.36, 0.30, 0.22, 0.10], zero_loss_by_epoch=[0.0, 0.01, 0.2, 0.5])
+    # the extractor figure plots every backbone of stage 4 with its training loss
+    for run, _ in script.BACKBONE_RUNS.values():
+        runs.setdefault(run, _run(0.79, [0.70, 0.76, 0.79])).setdefault("train_loss_epoch", [0.35, 0.25, 0.18])
     script.draw_curves(runs, tmp_path)
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
         f"{name}.{ext}" for name in script.CURVE_FIGURES for ext in ("pdf", "png"))
-    assert len(script.CURVE_FIGURES) == 6
+    assert len(script.CURVE_FIGURES) == 7
+
+
+def test_extractor_columns_cover_stage_4_with_at_most_three_series_per_panel() -> None:
+    script = _load_script()
+    codes = [code for _, column in script.EXTRACTOR_COLUMNS for code in column]
+    # every backbone once, except ResNet-18, which is the grey reference in every panel
+    assert sorted(codes) == sorted(set(script.BACKBONE_RUNS) - {"R18"})
+    assert all(len(column) <= 3 for _, column in script.EXTRACTOR_COLUMNS)
+    # "+ fc" on the figure must be the run with the fully connected layers, not the convolutional one
+    for code in codes:
+        run, label = script.BACKBONE_RUNS[code]
+        if run.startswith("G4_VGG"):
+            assert label.endswith(" + fc") == (not run.endswith("_CONV"))
 
 
 def test_dimension_points_are_sorted_and_512_carries_the_seed_range(runs) -> None:

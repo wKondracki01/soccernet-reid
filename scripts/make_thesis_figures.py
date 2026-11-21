@@ -8,11 +8,12 @@ Inputs (all written by earlier steps, nothing is trained or evaluated here)
 
 Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     ladder      validation mAP after each step from the starting point to the final model
-    curves      learning curves, six separate figures: the augmentation sets on ResNet-18 with their
+    curves      learning curves, seven separate figures: the augmentation sets on ResNet-18 with their
                 training loss and share of zero-loss steps, both classification losses of stage 2
                 with their training loss, the final configuration against AUG-MED, Multi-Similarity
                 and Circle in their two settings, the two cross-entropy reference runs with their
-                training loss, and the sampling variants of stage 1
+                training loss, the sampling variants of stage 1, and the eight feature extractors
+                of stage 4 with their training loss
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
@@ -169,7 +170,7 @@ def draw_ladder(runs: dict[str, dict], runs_dir: Path, out_dir: Path) -> None:
 
 # One file per learning-curve figure, so that each can sit in the section it belongs to.
 CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa",
-                 "krzywe_ustawienia_strat", "krzywe_odniesienie", "krzywe_dobor")
+                 "krzywe_ustawienia_strat", "krzywe_odniesienie", "krzywe_dobor", "krzywe_ekstraktory")
 
 
 def _curve_style(ax, xlabel: str = "epoka", ylabel: str | None = "mAP",
@@ -256,18 +257,13 @@ def _curve_legend(ax, entries: list[tuple[str, str]], loc: str = "lower right", 
     ax.legend(handles, labels, loc=loc, **LEGEND)
 
 
-def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra: list | None = None,
-                  ncol: int | None = None, solid: float | None = None) -> None:
-    """Legend centred under the axes: the series in one row (or ``ncol`` columns), and in a second row
-    the open circle of the selected model and any ``extra`` (handle, label) pairs. With ``solid`` (a
-    line width) each series shows, under its usual sample, the continuous line it has in another
-    panel. Drawn after tight_layout, so that it never covers a line."""
+def _stacked_handler():
+    """Legend handler for a pair of lines: two line samples, one above the other, in the space of one
+    legend handle (the marks of the measured mAP over the continuous line of the training loss)."""
     from matplotlib.legend_handler import HandlerBase
     from matplotlib.lines import Line2D
 
     class Stacked(HandlerBase):
-        """Two line samples, one above the other, in the space of one legend handle."""
-
         def create_artists(self, legend, orig_handle, xdescent, ydescent, width, height, fontsize, trans):
             x0, x1 = -xdescent, -xdescent + width
             artists = []
@@ -279,6 +275,24 @@ def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra
                 art.set_transform(trans)
                 artists.append(art)
             return artists
+
+    return Stacked()
+
+
+def _stacked_entry(colour: str, solid: float = 1.0) -> tuple:
+    """The two samples of one series for ``_stacked_handler``: its mAP marks and its loss line."""
+    from matplotlib.lines import Line2D
+
+    return Line2D([0], [0], **_measured(colour, 1)), Line2D([0], [0], color=colour, linewidth=solid)
+
+
+def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra: list | None = None,
+                  ncol: int | None = None, solid: float | None = None) -> None:
+    """Legend centred under the axes: the series in one row (or ``ncol`` columns), and in a second row
+    the open circle of the selected model and any ``extra`` (handle, label) pairs. With ``solid`` (a
+    line width) each series shows, under its usual sample, the continuous line it has in another
+    panel. Drawn after tight_layout, so that it never covers a line."""
+    from matplotlib.lines import Line2D
 
     rows = []
     if entries:
@@ -294,7 +308,7 @@ def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra
         stacked = i == 0 and bool(solid)
         legend = fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, top),
                             ncol=(ncol if i == 0 and ncol else len(labels)), columnspacing=1.5,
-                            handler_map={tuple: Stacked()} if stacked else None,
+                            handler_map={tuple: _stacked_handler()} if stacked else None,
                             **{**LEGEND, "handleheight": 1.9} if stacked else LEGEND)
         if stacked:   # a taller row: the next one starts right under it
             box = legend.get_window_extent(fig.canvas.get_renderer())
@@ -457,6 +471,40 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     _save(fig, out_dir, CURVE_FIGURES[5])
     plt.close(fig)
 
+    # stage 4, the eight feature extractors: validation mAP every five epochs over the mean training loss
+    # of every epoch, which can be compared between the networks because the loss and the augmentation
+    # are the same. One column per group of EXTRACTOR_COLUMNS, each row on one scale; ResNet-18 (the
+    # stage-3 run) is the grey reference in every panel. A column's legend sits in its loss panel, whose
+    # lower part stays empty, so that it never covers the dip of VGG16-BN + fc after epoch 15.
+    fig, axes = plt.subplots(2, 3, figsize=(TEXT_WIDTH_IN, 4.6), sharey="row")
+    reference_run = BACKBONE_RUNS["R18"][0]
+    for column, (title, codes) in enumerate(EXTRACTOR_COLUMNS):
+        top, bottom = axes[0][column], axes[1][column]
+        _curve_style(top, xlabel="", ylabel="mAP" if column == 0 else None, title=title)
+        _curve_style(bottom, ylabel="strata treningowa" if column == 0 else None)
+        for ax in (top, bottom):
+            ax.set_xticks(list(range(0, 41, 10)))
+            ax.set_xlim(0, 42)
+        _comma_axis(top, step=0.05)
+        _comma_axis(bottom, digits=1, step=0.1)
+        series = [(*BACKBONE_RUNS[code], colour) for code, colour in zip(codes, (CURVE_1, CURVE_2, CURVE_3))]
+        for name, colour, zorder in [(reference_run, REFERENCE, 1), *((run, c, 2) for run, _, c in series)]:
+            _curve_line(top, runs[name], colour, mark_best=colour != REFERENCE, zorder=zorder)
+            loss = [float(v) for v in runs[name]["train_loss_epoch"]]
+            bottom.plot(range(1, len(loss) + 1), loss, color=colour, linewidth=1.0, solid_capstyle="round",
+                        zorder=zorder)
+        bottom.legend([_stacked_entry(colour) for *_, colour in series], [label for _, label, _ in series],
+                      loc="lower left", handler_map={tuple: _stacked_handler()}, **{**LEGEND, "handleheight": 1.9})
+    axes[0][0].set_ylim(0.60, 0.82)
+    axes[1][0].set_ylim(0, 0.4)
+    fig.tight_layout(h_pad=1.0, w_pad=1.0)
+    ring = Line2D([0], [0], markeredgecolor=SLATE, **_best_ring(_measured(SLATE, 1)["markersize"]))
+    fig.legend([_stacked_entry(REFERENCE), ring], [BACKBONE_RUNS["R18"][1], BEST_LABEL], loc="upper center",
+               bbox_to_anchor=(0.5, 0.0), ncol=2, columnspacing=1.5, handler_map={tuple: _stacked_handler()},
+               **{**LEGEND, "handleheight": 1.9})
+    _save(fig, out_dir, CURVE_FIGURES[6])
+    plt.close(fig)
+
 
 def dimension_points(runs: dict[str, dict]) -> list[tuple[int, float, float, float]]:
     """(D, mAP, lowest, highest); D = 512 is the mean of the three final seeds with their range."""
@@ -504,6 +552,15 @@ BACKBONE_RUNS: dict[str, tuple[str, str]] = {
     "VGG11-BN": ("G4_VGG11_BN", "VGG11-BN + fc"),
     "VGG16-BN": ("G4_VGG16_BN", "VGG16-BN + fc"),
 }
+
+# columns of the stage-4 learning-curve figure, as codes of BACKBONE_RUNS. At most three series per panel:
+# the series palette passes its colour-vision checks for three hues, and a fourth hue or lighter steps
+# of the same hues did not. ResNet-18 is drawn as the grey reference in every panel instead.
+EXTRACTOR_COLUMNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("ResNet i EfficientNet", ("R34", "EB2", "EB1")),
+    ("VGG", ("VGG16-BN-CONV", "VGG11-BN-CONV")),
+    ("VGG + fc", ("VGG16-BN", "VGG11-BN")),
+)
 
 
 def cost_points(runs: dict[str, dict], speed: dict) -> list[dict]:
