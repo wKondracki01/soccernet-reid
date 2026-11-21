@@ -580,7 +580,7 @@ def backbone_results_table(runs_dir: Path, speed: dict) -> Table:
         "lrrrrrr", [["Ekstraktor", "Parametry [mln]", "Wycinki/s", *METRIC_HEADER]], rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
               "Przepustowość, czyli liczbę wycinków przetwarzanych w~ciągu sekundy, zmierzono dla partii "
-              "64 wycinków na karcie \\emph{NVIDIA GeForce RTX~4090}.",
+              "64 wycinków na karcie graficznej \\emph{NVIDIA GeForce RTX~4090}.",
         arraystretch=1.18, tabcolsep=4.5, width="0.97\\linewidth",
     )
 
@@ -590,12 +590,14 @@ def computational_cost_table(speed: dict) -> Table:
     rows = [[name, pl(by_code[code]["latency_ms_single_image"], 2),
              pl(by_code[code]["train_steps_per_s"], 1)]
             for code, (name, _, _) in BACKBONES.items()]
+    # three plain columns spread over the width of the note, as in the results table above it; a wide
+    # paragraph column for the names pushed both numbers to the right edge and left the middle empty
     return Table(
         "koszt-ekstraktorow",
         "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech",
-        par(0.55) + "rr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
+        "lrr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
-              "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
+              "Pomiary wykonano na karcie graficznej \\emph{NVIDIA GeForce RTX~4090}. "
               "Opóźnienie mierzono dla jednego wycinka, a~szybkość kroku uczenia dla partii 16 wycinków, "
               "z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
         arraystretch=1.18, width="0.97\\linewidth",

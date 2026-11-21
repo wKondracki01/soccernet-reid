@@ -183,7 +183,7 @@ def test_backbone_results_join_speed_by_code_and_sort_by_map(tmp_path) -> None:
     assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[3:])
     # first column named as in chapter 4; the measurement details sit in the note, not in the caption
     assert table.header[0][0] == "Ekstraktor"
-    assert "RTX" not in table.caption and "RTX~4090" in table.notes and table.width == "0.97\\linewidth"
+    assert "RTX" not in table.caption and "karcie graficznej" in table.notes and table.width == "0.97\\linewidth"
     script.render(table)
 
 
@@ -196,5 +196,8 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
     assert table.rows == [[name, script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
                           for i, (name, _, _) in enumerate(script.BACKBONES.values())]
     assert table.header[0][0] == "Ekstraktor"
-    assert "RTX" not in table.caption and "RTX~4090" in table.notes
+    assert "RTX" not in table.caption and "karcie graficznej" in table.notes
+    # plain columns spread over the width of the note, as in the results table, so that no wide name
+    # column pushes the numbers to the right edge
+    assert table.spec == "lrr" and table.width == "0.97\\linewidth"
     script.render(table)
