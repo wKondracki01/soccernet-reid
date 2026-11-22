@@ -178,9 +178,10 @@ def flush_right(width: float) -> str:
 # 0.10 of the line and the other headers of the cost table about 0.17, the longest, "Opóźnienie [ms]", with its
 # side bearings about 0.171; 0.18 keeps it on one line. With the padding of 3 pt instead of 4.5 pt the name
 # column (about 0.16) and four such columns fit in 0.97 of the line with some 9 pt to spare. At the author's
-# wish the short throughput column stands a little, 0.02 of the line, left of the right edge of its share,
-# a little farther from the latency column, whose header fills its share; the other columns stay in place.
-COST_GRID = "l" + flush_right(0.18) * 2 + "<{\\hspace*{0.02\\linewidth}}" + flush_right(0.18) * 2
+# wish the short throughput column stands left of the right edge of its share, farther from the latency
+# column, whose header fills its share; the author set the shift to 0.08 of the line in the thesis. The other
+# columns stay in place.
+COST_GRID = "l" + flush_right(0.18) * 2 + "<{\\hspace*{0.08\\linewidth}}" + flush_right(0.18) * 2
 
 
 def column_count(spec: str) -> int:

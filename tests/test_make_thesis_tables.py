@@ -211,6 +211,7 @@ def test_cost_grid_has_four_number_columns_of_one_width() -> None:
     script = _load_script()
     column = ">{\\raggedleft\\arraybackslash}p{0.18\\linewidth}"
     assert script.column_count(script.COST_GRID) == 5
-    # the second number column, the throughput, stands a little left of the right edge of its share
-    assert script.COST_GRID == "l" + 2 * column + "<{\\hspace*{0.02\\linewidth}}" + 2 * column
+    # the second number column, the throughput, stands left of the right edge of its share, by the 0.08 of
+    # the line the author set in the thesis
+    assert script.COST_GRID == "l" + 2 * column + "<{\\hspace*{0.08\\linewidth}}" + 2 * column
     assert script.column_count("l<{\\hspace*{1em}}r@{}") == 2
