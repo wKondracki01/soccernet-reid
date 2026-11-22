@@ -577,12 +577,15 @@ def cost_points(runs: dict[str, dict], speed: dict) -> list[dict]:
 
 def draw_cost(runs: dict[str, dict], speed: dict, out_dir: Path) -> None:
     import matplotlib.pyplot as plt
-    from matplotlib.ticker import FuncFormatter
+    from matplotlib.ticker import FuncFormatter, MultipleLocator
 
     pts = cost_points(runs, speed)
-    width = 0.8 * TEXT_WIDTH_IN                  # printed at 0.8 of the text width
+    width = 0.85 * TEXT_WIDTH_IN                 # printed at 0.85 of the text width, as the author set it
     fig, ax = plt.subplots(figsize=(width, 0.6 * width))
-    _curve_style(ax, xlabel="czas przetworzenia jednego wycinka [ms]", ylabel="mAP")
+    # the time on the x axis is the batch time divided by its 64 crops, the inverse of the throughput, not
+    # the latency of a single crop, which the cost table gives as well; the label says so, and the caption
+    # gives the size of the batch
+    _curve_style(ax, xlabel="średni czas przetworzenia wycinka w partii [ms]", ylabel="mAP")
     ax.grid(True, axis="x", color=GRID, linewidth=0.6)
     ax.scatter([p["ms"] for p in pts], [p["mAP"] for p in pts], s=26, color=CURVE_1,
                edgecolors="white", linewidths=0.6, zorder=3)
@@ -590,9 +593,22 @@ def draw_cost(runs: dict[str, dict], speed: dict, out_dir: Path) -> None:
         ax.annotate(f"{p['label']}\n{pl(p['parameters'] / 1e6, 1)} mln", (p["ms"], p["mAP"]),
                     textcoords="offset points", xytext=(5, 0), ha="left", va="center",
                     fontsize=SIZE_NOTE, color=SLATE, linespacing=1.1)
-    ax.set_xlim(0, max(p["ms"] for p in pts) * 1.35)
+    # the x axis ends on the round 0.8 ms, which leaves room for the labels right of the slowest variant
+    # (0.61 ms); ticks every 0.1 ms with one decimal, which is all the scale needs
+    if max(p["ms"] for p in pts) > 0.65:
+        raise ValueError("the labels right of the slowest variant would not fit: widen the x limits")
+    ax.set_xlim(0, 0.8)
+    ax.xaxis.set_major_locator(MultipleLocator(0.1))
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: pl(v, 1)))
+    # the x labels sit a little lower than by default, so that "0,0" keeps clear of "0,76" at the corner
+    ax.tick_params(axis="x", pad=6)
+    # round limits a tick below the lowest and above the highest point, so that neither the best mAP
+    # (0.8083) nor the two "+ fc" variants (0.770) touch the edge of the plot
+    low, high = 0.76, 0.82
+    if not all(low + 0.005 < p["mAP"] < high - 0.005 for p in pts):
+        raise ValueError("a point lies within half a tick of the edge of the plot: widen the y limits")
+    ax.set_ylim(low, high)
     _comma_axis(ax, step=0.01)
-    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: pl(v, 2)))
     fig.tight_layout()
     _save(fig, out_dir, "dokladnosc_wobec_kosztu")
     plt.close(fig)
