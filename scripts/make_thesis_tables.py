@@ -173,8 +173,8 @@ def flush_right(width: float) -> str:
     return f">{{\\raggedleft\\arraybackslash}}p{{{width}\\linewidth}}"
 
 
-# Both tables of stage 4 share one grid: the extractor name and four number columns of one width, so that the
-# numbers stand at equal distances even where a header is short. In the compiled thesis "Wycinki/s" takes about
+# The cost table of stage 4: the extractor name and four number columns of one width, so that the numbers
+# stand at equal distances even where a header is short. In the compiled thesis "Wycinki/s" takes about
 # 0.10 of the line and the other headers of the cost table about 0.17, the longest, "Opóźnienie [ms]", with its
 # side bearings about 0.171; 0.18 keeps it on one line. With the padding of 3 pt instead of 4.5 pt the name
 # column (about 0.16) and four such columns fit in 0.97 of the line with some 9 pt to spare.
@@ -582,15 +582,15 @@ def backbone_results_table(runs_dir: Path) -> Table:
     rows = [[BACKBONES[code][0], *values] for (code, _), values in zip(labelled, cells, strict=True)]
     # the scores only, as in the results tables of the other stages: the number of parameters and the
     # throughput stand in the cost table, with the other measures of cost they are compared with in the text;
-    # no note, since the text explains "+ fc" (a note saying it again was rejected by the author), but the grid
-    # and the width of the cost table, so that the table is not narrow and both tables of the stage look alike,
-    # as the table of extractors in chapter 4 is wide without a note; "Ekstraktor" heads the first column as
-    # in the chapter 4 tables, since "+ fc" rows are variants
+    # no note, since the text explains "+ fc" (a note saying it again was rejected by the author); laid out
+    # as the author set table 5.1, which has the same four score columns: a name column of half the line and
+    # the scores close together at the right, over 0.97 of the line; "Ekstraktor" heads the first column as in
+    # the chapter 4 tables, since "+ fc" rows are variants
     return Table(
         "wyniki-ekstraktory",
         "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok)",
-        EXTRACTOR_GRID, [["Ekstraktor", *METRIC_HEADER]], rows,
-        arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
+        par(0.5) + "rrrr", [["Ekstraktor", *METRIC_HEADER]], rows,
+        arraystretch=1.18, width="0.97\\linewidth",
     )
 
 

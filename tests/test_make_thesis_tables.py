@@ -179,10 +179,11 @@ def test_backbone_results_hold_only_the_scores_sorted_by_map(tmp_path) -> None:
     assert all(cell.startswith("\\textbf{") for cell in table.rows[0][1:])
     assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[1:])
     # first column named as in chapter 4; the parameters and the throughput are in the cost table, so this
-    # one has the scores only; no note, as the text explains "+ fc", but the grid and the width of the cost table
+    # one has the scores only; no note, as the text explains "+ fc"; laid out as table 5.1 in the thesis, with
+    # the scores close together at the right
     assert table.header == [["Ekstraktor", *script.METRIC_HEADER]]
     assert "przepustowo" not in table.caption and not table.notes
-    assert table.spec == script.EXTRACTOR_GRID and table.width == "0.97\\linewidth" and table.tabcolsep == 3
+    assert table.spec == script.par(0.5) + "rrrr" and table.width == "0.97\\linewidth" and table.tabcolsep is None
     script.render(table)
 
 
