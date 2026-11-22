@@ -561,47 +561,43 @@ def selection_results_table(runs_dir: Path) -> Table:
     )
 
 
-def backbone_results_table(runs_dir: Path, speed: dict) -> Table:
-    """Validation scores and measured cost, joined by backbone code and sorted by mAP."""
-    by_code = {result["backbone"]: result for result in speed["results"]}
+def backbone_results_table(runs_dir: Path) -> Table:
+    """Validation scores of the eight feature extractors, sorted by mAP."""
     labelled = [(code, scores(runs_dir, run)) for code, run in BACKBONE_RUNS.items()]
     labelled.sort(key=lambda item: -item[1][0])
     cells = metric_cells([values for _, values in labelled])
-    rows = [[BACKBONES[code][0], pl(by_code[code]["parameters"] / 1e6, 1),
-             num(round(by_code[code]["inference_images_per_s"])), *values]
-            for (code, _), values in zip(labelled, cells, strict=True)]
-    # the caption keeps the training settings, which concern the scores only; how the parameters were
-    # counted and the throughput measured goes into the note, as under the other tables of chapter 5;
+    rows = [[BACKBONES[code][0], *values] for (code, _), values in zip(labelled, cells, strict=True)]
+    # the scores only, as in the results tables of the other stages: the number of parameters and the
+    # throughput stand in the cost table, with the other measures of cost they are compared with in the text;
+    # with no note, the table keeps its natural width, as the other tables of chapter 5 without one;
     # "Ekstraktor" heads the first column as in the chapter 4 tables, since "+ fc" rows are variants
     return Table(
         "wyniki-ekstraktory",
-        "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok) "
-        "wraz z~liczbą parametrów i~przepustowością",
-        "lrrrrrr", [["Ekstraktor", "Parametry [mln]", "Wycinki/s", *METRIC_HEADER]], rows,
-        notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
-              "Przepustowość, czyli liczbę wycinków przetwarzanych w~ciągu sekundy, zmierzono dla partii "
-              "64 wycinków na karcie graficznej \\emph{NVIDIA GeForce RTX~4090}.",
-        arraystretch=1.18, tabcolsep=4.5, width="0.97\\linewidth",
+        "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok)",
+        "lrrrr", [["Ekstraktor", *METRIC_HEADER]], rows,
+        arraystretch=1.18, tabcolsep=4.5,
     )
 
 
 def computational_cost_table(speed: dict) -> Table:
+    """Parameters, throughput, latency and training steps per second, in the order of the backbone families."""
     by_code = {result["backbone"]: result for result in speed["results"]}
-    rows = [[name, pl(by_code[code]["latency_ms_single_image"], 2),
-             pl(by_code[code]["train_steps_per_s"], 1)]
+    rows = [[name, pl(by_code[code]["parameters"] / 1e6, 1), num(round(by_code[code]["inference_images_per_s"])),
+             pl(by_code[code]["latency_ms_single_image"], 2), pl(by_code[code]["train_steps_per_s"], 1)]
             for code, (name, _, _) in BACKBONES.items()]
-    # stretched to the width of the note, as the results table above it; the fixed width of the name column
-    # sets where the latency column stands: 0.55 pushed it against the last column and left the middle empty,
-    # plain l spread the columns evenly, and 0.35 (the author's choice) puts it a little right of the middle
+    # every measure of cost in one table, as section 4.8 counts both the parameters and the speed in it;
+    # stretched to the width of the note, as the other tables of chapter 5 with a note; the card is named
+    # without "graficznej" here, as the author wants it in this note
     return Table(
         "koszt-ekstraktorow",
-        "Opóźnienie i~szybkość kroku uczenia ekstraktorów cech",
-        par(0.35) + "rr", [["Ekstraktor", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
+        "Koszt obliczeniowy ekstraktorów cech",
+        "lrrrr", [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
               "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
-              "Opóźnienie mierzono dla jednego wycinka, a~szybkość kroku uczenia dla partii 16 wycinków, "
-              "z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
-        arraystretch=1.18, width="0.97\\linewidth",
+              "Przepustowość, czyli liczbę wycinków przetwarzanych w~ciągu sekundy, mierzono dla partii "
+              "64 wycinków, a~opóźnienie dla jednego wycinka. Szybkość kroku uczenia wyznaczono dla partii "
+              "16 wycinków, z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
+        arraystretch=1.18, tabcolsep=4.5, width="0.97\\linewidth",
     )
 
 
@@ -708,7 +704,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     tables.append(stage3_table)
 
     # stage 4
-    tables.append(backbone_results_table(runs_dir, speed))
+    tables.append(backbone_results_table(runs_dir))
     tables.append(computational_cost_table(speed))
 
     # stage 5: the base and selected variants, all trained with seed 0

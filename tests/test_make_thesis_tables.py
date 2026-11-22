@@ -163,41 +163,40 @@ def test_method_tables_are_consistent() -> None:
     assert len(plan.rows) == len(script.STAGES)
 
 
-def test_backbone_results_join_speed_by_code_and_sort_by_map(tmp_path) -> None:
+def test_backbone_results_hold_only_the_scores_sorted_by_map(tmp_path) -> None:
     script = _load_script()
-    speed_rows = []
     expected = []
     for i, (code, run) in enumerate(script.BACKBONE_RUNS.items(), start=1):
         _write_run(tmp_path, run)
         values = (0.5 + i / 100, 0.4 + i / 100, 0.8 + i / 100, 0.9 + i / 100)
         (tmp_path / run / "eval_valid.json").write_text(json.dumps({"epoch": i, **dict(zip(script.METRICS, values))}))
-        speed_rows.append({"backbone": code, "parameters": i * 1_000_000,
-                           "inference_images_per_s": i * 1000 + 0.4})
-        expected.append((script.BACKBONES[code][0], f"{i},0", script.num(i * 1000), values))
-    table = script.backbone_results_table(tmp_path, {"results": list(reversed(speed_rows))})
-    for row, (name, parameters, throughput, values) in zip(table.rows, reversed(expected), strict=True):
-        assert row[:3] == [name, parameters, throughput]
-        assert [cell.removeprefix("\\textbf{").removesuffix("}") for cell in row[3:]] == [
+        expected.append((script.BACKBONES[code][0], values))
+    table = script.backbone_results_table(tmp_path)
+    for row, (name, values) in zip(table.rows, reversed(expected), strict=True):
+        assert row[0] == name
+        assert [cell.removeprefix("\\textbf{").removesuffix("}") for cell in row[1:]] == [
             script.pl(value) for value in values]
-    assert all(cell.startswith("\\textbf{") for cell in table.rows[0][3:])
-    assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[3:])
-    # first column named as in chapter 4; the measurement details sit in the note, not in the caption
-    assert table.header[0][0] == "Ekstraktor"
-    assert "RTX" not in table.caption and "karcie graficznej" in table.notes and table.width == "0.97\\linewidth"
+    assert all(cell.startswith("\\textbf{") for cell in table.rows[0][1:])
+    assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[1:])
+    # first column named as in chapter 4; the parameters and the throughput are in the cost table, so this
+    # one has the scores only and, with no note, its natural width, as the other tables without a note
+    assert table.header == [["Ekstraktor", *script.METRIC_HEADER]]
+    assert "przepustowo" not in table.caption and not table.notes and table.width is None
     script.render(table)
 
 
 def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
     script = _load_script()
-    speed_rows = [{"backbone": code, "latency_ms_single_image": i + 0.125,
-                   "train_steps_per_s": i + 10.25}
+    speed_rows = [{"backbone": code, "parameters": (i + 1) * 1_000_000, "inference_images_per_s": 1000 * i + 0.4,
+                   "latency_ms_single_image": i + 0.125, "train_steps_per_s": i + 10.25}
                   for i, code in enumerate(script.BACKBONES)]
     table = script.computational_cost_table({"results": list(reversed(speed_rows))})
-    assert table.rows == [[name, script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
+    assert table.rows == [[name, f"{i + 1},0", script.num(1000 * i), script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
                           for i, (name, _, _) in enumerate(script.BACKBONES.values())]
-    assert table.header[0][0] == "Ekstraktor"
+    # every measure of cost in one table, the parameters and the throughput included
+    assert table.header == [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]]
     assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here
-    # stretched to the width of the note, as the results table; the name column keeps the width the author
-    # chose (0.35), narrow enough that the latency column does not end up against the last one
-    assert table.spec == script.par(0.35) + "rr" and table.width == "0.97\\linewidth"
+    assert "dla partii 64 wycinków" in table.notes and "dla partii 16 wycinków" in table.notes
+    # stretched to the width of the note, as the other tables of chapter 5 with a note
+    assert table.spec == "lrrrr" and table.width == "0.97\\linewidth"
     script.render(table)
