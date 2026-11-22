@@ -193,13 +193,9 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
                    "latency_ms_single_image": i + 0.125, "train_steps_per_s": i + 10.25}
                   for i, code in enumerate(script.BACKBONES)]
     table = script.computational_cost_table({"results": list(reversed(speed_rows))})
-    plain = [[cell.removeprefix("\\textbf{").removesuffix("}") for cell in row] for row in table.rows]
-    assert plain == [[name, f"{i + 1},0", script.num(1000 * i), script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
-                     for i, (name, _, _) in enumerate(script.BACKBONES.values())]
-    # the best value of each column is bold: the fewest parameters and the shortest latency (the first row
-    # here), the most crops and the most training steps per second (the last row)
-    marked = [(r, c) for r, row in enumerate(table.rows) for c, cell in enumerate(row) if cell.startswith("\\textbf{")]
-    assert marked == [(0, 1), (0, 3), (7, 2), (7, 4)]
+    # no value is bold: the author chose so, as what is best differs between the columns
+    assert table.rows == [[name, f"{i + 1},0", script.num(1000 * i), script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
+                          for i, (name, _, _) in enumerate(script.BACKBONES.values())]
     # every measure of cost in one table, the parameters and the throughput included
     assert table.header == [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]]
     assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here

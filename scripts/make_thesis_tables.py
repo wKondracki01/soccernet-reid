@@ -31,7 +31,6 @@ import json
 import re
 import statistics
 import sys
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -138,12 +137,6 @@ def metric_cells(rows: list[tuple[float, ...]], digits: int = 4, mark_best: bool
             cells.append(bold(text) if mark_best and pl(top, digits) == text else text)
         out.append(cells)
     return out
-
-
-def best_marked(values: list[float], text: Callable[[float], str], lowest: bool) -> list[str]:
-    """Format one column of measurements; the best one, the lowest or the highest as said, is bold."""
-    best = text(min(values) if lowest else max(values))
-    return [bold(cell) if cell == best else cell for cell in map(text, values)]
 
 
 def mean_sd(values: list[float]) -> tuple[float, float]:
@@ -607,16 +600,13 @@ def backbone_results_table(runs_dir: Path) -> Table:
 def computational_cost_table(speed: dict) -> Table:
     """Parameters, throughput, latency and training steps per second, in the order of the backbone families."""
     by_code = {result["backbone"]: result for result in speed["results"]}
-    measured = [by_code[code] for code in BACKBONES]
-    # the best value of each column is bold, as the best scores are in the tables of results: the fewest
-    # parameters, the most crops per second, the shortest latency and the most training steps per second
-    columns = [
-        best_marked([m["parameters"] / 1e6 for m in measured], lambda value: pl(value, 1), lowest=True),
-        best_marked([m["inference_images_per_s"] for m in measured], lambda value: num(round(value)), lowest=False),
-        best_marked([m["latency_ms_single_image"] for m in measured], lambda value: pl(value, 2), lowest=True),
-        best_marked([m["train_steps_per_s"] for m in measured], lambda value: pl(value, 1), lowest=False),
-    ]
-    rows = [[name, *cells] for (name, _, _), *cells in zip(BACKBONES.values(), *columns, strict=True)]
+    rows = [[name, pl(by_code[code]["parameters"] / 1e6, 1), num(round(by_code[code]["inference_images_per_s"])),
+             pl(by_code[code]["latency_ms_single_image"], 2), pl(by_code[code]["train_steps_per_s"], 1)]
+            for code, (name, _, _) in BACKBONES.items()]
+    # no value is bold, unlike the best scores in the tables of results (the author's choice): what is best
+    # differs between the columns, the fewest parameters and the shortest latency but the most crops and
+    # steps per second; the fastest training step changed places between the two series of measurements, as
+    # the text says; and the text names the extremes of every column anyway
     # every measure of cost in one table, as section 4.8 counts both the parameters and the speed in it, in
     # the order the text names them; the grid of equal number columns keeps the short "Wycinki/s" from
     # standing closer to its neighbour than the other columns do; the text defines the throughput, so the
