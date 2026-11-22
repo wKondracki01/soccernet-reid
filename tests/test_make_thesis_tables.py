@@ -179,9 +179,10 @@ def test_backbone_results_hold_only_the_scores_sorted_by_map(tmp_path) -> None:
     assert all(cell.startswith("\\textbf{") for cell in table.rows[0][1:])
     assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[1:])
     # first column named as in chapter 4; the parameters and the throughput are in the cost table, so this
-    # one has the scores only and, with no note, its natural width, as the other tables without a note
+    # one has the scores only; no note, as the text explains "+ fc", but the grid and the width of the cost table
     assert table.header == [["Ekstraktor", *script.METRIC_HEADER]]
-    assert "przepustowo" not in table.caption and not table.notes and table.width is None
+    assert "przepustowo" not in table.caption and not table.notes
+    assert table.spec == script.EXTRACTOR_GRID and table.width == "0.97\\linewidth" and table.tabcolsep == 3
     script.render(table)
 
 
@@ -196,7 +197,15 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
     # every measure of cost in one table, the parameters and the throughput included
     assert table.header == [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]]
     assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here
+    # the text defines the throughput; the note keeps only how each speed was measured
+    assert "czyli" not in table.notes
     assert "dla partii 64 wycinków" in table.notes and "dla partii 16 wycinków" in table.notes
-    # stretched to the width of the note, as the other tables of chapter 5 with a note
-    assert table.spec == "lrrrr" and table.width == "0.97\\linewidth"
+    # four number columns of one width, stretched to the width of the note
+    assert table.spec == script.EXTRACTOR_GRID and table.width == "0.97\\linewidth" and table.tabcolsep == 3
     script.render(table)
+
+
+def test_extractor_grid_has_four_number_columns_of_one_width() -> None:
+    script = _load_script()
+    assert script.column_count(script.EXTRACTOR_GRID) == 5
+    assert script.EXTRACTOR_GRID == "l" + 4 * ">{\\raggedleft\\arraybackslash}p{0.18\\linewidth}"

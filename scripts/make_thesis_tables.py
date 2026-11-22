@@ -168,6 +168,19 @@ def par(width: float) -> str:
     return f">{{\\raggedright\\arraybackslash}}p{{{width}\\linewidth}}"
 
 
+def flush_right(width: float) -> str:
+    """A paragraph column of the given share of the line width with its content flush right, for numbers."""
+    return f">{{\\raggedleft\\arraybackslash}}p{{{width}\\linewidth}}"
+
+
+# Both tables of stage 4 share one grid: the extractor name and four number columns of one width, so that the
+# numbers stand at equal distances even where a header is short. In the compiled thesis "Wycinki/s" takes about
+# 0.10 of the line and the other headers of the cost table about 0.17, the longest, "Opóźnienie [ms]", with its
+# side bearings about 0.171; 0.18 keeps it on one line. With the padding of 3 pt instead of 4.5 pt the name
+# column (about 0.16) and four such columns fit in 0.97 of the line with some 9 pt to spare.
+EXTRACTOR_GRID = "l" + flush_right(0.18) * 4
+
+
 def column_count(spec: str) -> int:
     """Number of columns in a specification made of l, c, r and p{...}, with optional @{...} and >{...}."""
     stripped = re.sub(r"[@>]\{[^{}]*\}", "", spec)
@@ -569,13 +582,15 @@ def backbone_results_table(runs_dir: Path) -> Table:
     rows = [[BACKBONES[code][0], *values] for (code, _), values in zip(labelled, cells, strict=True)]
     # the scores only, as in the results tables of the other stages: the number of parameters and the
     # throughput stand in the cost table, with the other measures of cost they are compared with in the text;
-    # with no note, the table keeps its natural width, as the other tables of chapter 5 without one;
-    # "Ekstraktor" heads the first column as in the chapter 4 tables, since "+ fc" rows are variants
+    # no note, since the text explains "+ fc" (a note saying it again was rejected by the author), but the grid
+    # and the width of the cost table, so that the table is not narrow and both tables of the stage look alike,
+    # as the table of extractors in chapter 4 is wide without a note; "Ekstraktor" heads the first column as
+    # in the chapter 4 tables, since "+ fc" rows are variants
     return Table(
         "wyniki-ekstraktory",
         "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok)",
-        "lrrrr", [["Ekstraktor", *METRIC_HEADER]], rows,
-        arraystretch=1.18, tabcolsep=4.5,
+        EXTRACTOR_GRID, [["Ekstraktor", *METRIC_HEADER]], rows,
+        arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
     )
 
 
@@ -585,19 +600,22 @@ def computational_cost_table(speed: dict) -> Table:
     rows = [[name, pl(by_code[code]["parameters"] / 1e6, 1), num(round(by_code[code]["inference_images_per_s"])),
              pl(by_code[code]["latency_ms_single_image"], 2), pl(by_code[code]["train_steps_per_s"], 1)]
             for code, (name, _, _) in BACKBONES.items()]
-    # every measure of cost in one table, as section 4.8 counts both the parameters and the speed in it;
-    # stretched to the width of the note, as the other tables of chapter 5 with a note; the card is named
-    # without "graficznej" here, as the author wants it in this note
+    # every measure of cost in one table, as section 4.8 counts both the parameters and the speed in it, in
+    # the order the text names them; the grid of equal number columns keeps the short "Wycinki/s" from
+    # standing closer to its neighbour than the other columns do; the text defines the throughput, so the
+    # note keeps only how each speed was measured; the card is named without "graficznej" here, as the
+    # author wants it in this note
     return Table(
         "koszt-ekstraktorow",
         "Koszt obliczeniowy ekstraktorów cech",
-        "lrrrr", [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]], rows,
+        EXTRACTOR_GRID, [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]],
+        rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
               "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
-              "Przepustowość, czyli liczbę wycinków przetwarzanych w~ciągu sekundy, mierzono dla partii "
-              "64 wycinków, a~opóźnienie dla jednego wycinka. Szybkość kroku uczenia wyznaczono dla partii "
-              "16 wycinków, z~wykorzystaniem straty trójkowej, doboru BH i~optymalizatora \\emph{Adam}.",
-        arraystretch=1.18, tabcolsep=4.5, width="0.97\\linewidth",
+              "Przepustowość mierzono dla partii 64 wycinków, a~opóźnienie dla jednego wycinka. "
+              "Szybkość kroku uczenia wyznaczono dla partii 16 wycinków, z~wykorzystaniem straty trójkowej, "
+              "doboru BH i~optymalizatora \\emph{Adam}.",
+        arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
     )
 
 
