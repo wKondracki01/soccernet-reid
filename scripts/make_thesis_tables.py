@@ -31,6 +31,7 @@ import json
 import re
 import statistics
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -139,6 +140,12 @@ def metric_cells(rows: list[tuple[float, ...]], digits: int = 4, mark_best: bool
     return out
 
 
+def best_marked(values: list[float], text: Callable[[float], str], lowest: bool) -> list[str]:
+    """Format one column of measurements; the best one, the lowest or the highest as said, is bold."""
+    best = text(min(values) if lowest else max(values))
+    return [bold(cell) if cell == best else cell for cell in map(text, values)]
+
+
 def mean_sd(values: list[float]) -> tuple[float, float]:
     return statistics.mean(values), statistics.stdev(values)
 
@@ -177,13 +184,15 @@ def flush_right(width: float) -> str:
 # stand at equal distances even where a header is short. In the compiled thesis "Wycinki/s" takes about
 # 0.10 of the line and the other headers of the cost table about 0.17, the longest, "Opóźnienie [ms]", with its
 # side bearings about 0.171; 0.18 keeps it on one line. With the padding of 3 pt instead of 4.5 pt the name
-# column (about 0.16) and four such columns fit in 0.97 of the line with some 9 pt to spare.
-EXTRACTOR_GRID = "l" + flush_right(0.18) * 4
+# column (about 0.16) and four such columns fit in 0.97 of the line with some 9 pt to spare. At the author's
+# wish the short throughput column stands a little, 0.02 of the line, left of the right edge of its share,
+# a little farther from the latency column, whose header fills its share; the other columns stay in place.
+COST_GRID = "l" + flush_right(0.18) * 2 + "<{\\hspace*{0.02\\linewidth}}" + flush_right(0.18) * 2
 
 
 def column_count(spec: str) -> int:
-    """Number of columns in a specification made of l, c, r and p{...}, with optional @{...} and >{...}."""
-    stripped = re.sub(r"[@>]\{[^{}]*\}", "", spec)
+    """Number of columns in a specification made of l, c, r and p{...}, with optional @{...}, >{...} and <{...}."""
+    stripped = re.sub(r"[@<>]\{(?:[^{}]|\{[^{}]*\})*\}", "", spec)
     stripped = re.sub(r"p\{[^{}]*\}", "p", stripped)
     if not re.fullmatch(r"[lcrp]+", stripped):
         raise ValueError(f"unsupported column specification: {spec!r}")
@@ -583,13 +592,14 @@ def backbone_results_table(runs_dir: Path) -> Table:
     # the scores only, as in the results tables of the other stages: the number of parameters and the
     # throughput stand in the cost table, with the other measures of cost they are compared with in the text;
     # no note, since the text explains "+ fc" (a note saying it again was rejected by the author); laid out
-    # as the author set table 5.1, which has the same four score columns: a name column of half the line and
-    # the scores close together at the right, over 0.97 of the line; "Ekstraktor" heads the first column as in
-    # the chapter 4 tables, since "+ fc" rows are variants
+    # as table 5.1, which has the same four score columns, with the scores close together at the right of a
+    # table of 0.97 of the line, but with the name column of a quarter of the line that the author chose for
+    # this table in the thesis; "Ekstraktor" heads the first column as in the chapter 4 tables, since "+ fc"
+    # rows are variants
     return Table(
         "wyniki-ekstraktory",
         "Wyniki ekstraktorów cech na zbiorze walidacyjnym (strata trójkowa, PK-SA-BH, AUG-MED, 40 epok)",
-        par(0.5) + "rrrr", [["Ekstraktor", *METRIC_HEADER]], rows,
+        par(0.25) + "rrrr", [["Ekstraktor", *METRIC_HEADER]], rows,
         arraystretch=1.18, width="0.97\\linewidth",
     )
 
@@ -597,9 +607,16 @@ def backbone_results_table(runs_dir: Path) -> Table:
 def computational_cost_table(speed: dict) -> Table:
     """Parameters, throughput, latency and training steps per second, in the order of the backbone families."""
     by_code = {result["backbone"]: result for result in speed["results"]}
-    rows = [[name, pl(by_code[code]["parameters"] / 1e6, 1), num(round(by_code[code]["inference_images_per_s"])),
-             pl(by_code[code]["latency_ms_single_image"], 2), pl(by_code[code]["train_steps_per_s"], 1)]
-            for code, (name, _, _) in BACKBONES.items()]
+    measured = [by_code[code] for code in BACKBONES]
+    # the best value of each column is bold, as the best scores are in the tables of results: the fewest
+    # parameters, the most crops per second, the shortest latency and the most training steps per second
+    columns = [
+        best_marked([m["parameters"] / 1e6 for m in measured], lambda value: pl(value, 1), lowest=True),
+        best_marked([m["inference_images_per_s"] for m in measured], lambda value: num(round(value)), lowest=False),
+        best_marked([m["latency_ms_single_image"] for m in measured], lambda value: pl(value, 2), lowest=True),
+        best_marked([m["train_steps_per_s"] for m in measured], lambda value: pl(value, 1), lowest=False),
+    ]
+    rows = [[name, *cells] for (name, _, _), *cells in zip(BACKBONES.values(), *columns, strict=True)]
     # every measure of cost in one table, as section 4.8 counts both the parameters and the speed in it, in
     # the order the text names them; the grid of equal number columns keeps the short "Wycinki/s" from
     # standing closer to its neighbour than the other columns do; the text defines the throughput, so the
@@ -608,7 +625,7 @@ def computational_cost_table(speed: dict) -> Table:
     return Table(
         "koszt-ekstraktorow",
         "Koszt obliczeniowy ekstraktorów cech",
-        EXTRACTOR_GRID, [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]],
+        COST_GRID, [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]],
         rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
               "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "

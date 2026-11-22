@@ -179,11 +179,11 @@ def test_backbone_results_hold_only_the_scores_sorted_by_map(tmp_path) -> None:
     assert all(cell.startswith("\\textbf{") for cell in table.rows[0][1:])
     assert not any("\\textbf{" in cell for row in table.rows[1:] for cell in row[1:])
     # first column named as in chapter 4; the parameters and the throughput are in the cost table, so this
-    # one has the scores only; no note, as the text explains "+ fc"; laid out as table 5.1 in the thesis, with
-    # the scores close together at the right
+    # one has the scores only; no note, as the text explains "+ fc"; laid out as table 5.1, with the scores
+    # close together at the right, and the name column of a quarter of the line the author chose for it
     assert table.header == [["Ekstraktor", *script.METRIC_HEADER]]
     assert "przepustowo" not in table.caption and not table.notes
-    assert table.spec == script.par(0.5) + "rrrr" and table.width == "0.97\\linewidth" and table.tabcolsep is None
+    assert table.spec == script.par(0.25) + "rrrr" and table.width == "0.97\\linewidth" and table.tabcolsep is None
     script.render(table)
 
 
@@ -193,8 +193,13 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
                    "latency_ms_single_image": i + 0.125, "train_steps_per_s": i + 10.25}
                   for i, code in enumerate(script.BACKBONES)]
     table = script.computational_cost_table({"results": list(reversed(speed_rows))})
-    assert table.rows == [[name, f"{i + 1},0", script.num(1000 * i), script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
-                          for i, (name, _, _) in enumerate(script.BACKBONES.values())]
+    plain = [[cell.removeprefix("\\textbf{").removesuffix("}") for cell in row] for row in table.rows]
+    assert plain == [[name, f"{i + 1},0", script.num(1000 * i), script.pl(i + 0.125, 2), script.pl(i + 10.25, 1)]
+                     for i, (name, _, _) in enumerate(script.BACKBONES.values())]
+    # the best value of each column is bold: the fewest parameters and the shortest latency (the first row
+    # here), the most crops and the most training steps per second (the last row)
+    marked = [(r, c) for r, row in enumerate(table.rows) for c, cell in enumerate(row) if cell.startswith("\\textbf{")]
+    assert marked == [(0, 1), (0, 3), (7, 2), (7, 4)]
     # every measure of cost in one table, the parameters and the throughput included
     assert table.header == [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]]
     assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here
@@ -202,11 +207,14 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
     assert "czyli" not in table.notes
     assert "dla partii 64 wycinków" in table.notes and "dla partii 16 wycinków" in table.notes
     # four number columns of one width, stretched to the width of the note
-    assert table.spec == script.EXTRACTOR_GRID and table.width == "0.97\\linewidth" and table.tabcolsep == 3
+    assert table.spec == script.COST_GRID and table.width == "0.97\\linewidth" and table.tabcolsep == 3
     script.render(table)
 
 
-def test_extractor_grid_has_four_number_columns_of_one_width() -> None:
+def test_cost_grid_has_four_number_columns_of_one_width() -> None:
     script = _load_script()
-    assert script.column_count(script.EXTRACTOR_GRID) == 5
-    assert script.EXTRACTOR_GRID == "l" + 4 * ">{\\raggedleft\\arraybackslash}p{0.18\\linewidth}"
+    column = ">{\\raggedleft\\arraybackslash}p{0.18\\linewidth}"
+    assert script.column_count(script.COST_GRID) == 5
+    # the second number column, the throughput, stands a little left of the right edge of its share
+    assert script.COST_GRID == "l" + 2 * column + "<{\\hspace*{0.02\\linewidth}}" + 2 * column
+    assert script.column_count("l<{\\hspace*{1em}}r@{}") == 2
