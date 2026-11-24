@@ -199,9 +199,9 @@ def test_computational_cost_keeps_family_order_and_code_mapping() -> None:
     # every measure of cost in one table, the parameters and the throughput included
     assert table.header == [["Ekstraktor", "Parametry [mln]", "Wycinki/s", "Opóźnienie [ms]", "Kroki uczenia/s"]]
     assert "RTX" not in table.caption and "na karcie \\emph{NVIDIA" in table.notes   # the author's wording here
-    # the text defines the throughput; the note keeps only how each speed was measured
+    # the text defines the throughput and gives its batch, so the note keeps only the training step
     assert "czyli" not in table.notes
-    assert "dla partii 64 wycinków" in table.notes and "dla partii 16 wycinków" in table.notes
+    assert "dla partii 64 wycinków" not in table.notes and "dla partii 16 wycinków" in table.notes
     # four number columns of one width, stretched to the width of the note
     assert table.spec == script.COST_GRID and table.width == "0.97\\linewidth" and table.tabcolsep == 3
     script.render(table)

@@ -610,9 +610,10 @@ def computational_cost_table(speed: dict) -> Table:
     # the text says; and the text names the extremes of every column anyway
     # every measure of cost in one table, as section 4.8 counts both the parameters and the speed in it, in
     # the order the text names them; the grid of equal number columns keeps the short "Wycinki/s" from
-    # standing closer to its neighbour than the other columns do; the text defines the throughput, so the
-    # note keeps only how each speed was measured; the card is named without "graficznej" here, as the
-    # author wants it in this note
+    # standing closer to its neighbour than the other columns do; the text defines the throughput and
+    # gives the batch of 64 and the single crop of the latency, so the note keeps only the model, the card
+    # and the training step, as the author cut it in the thesis; the card is named without "graficznej"
+    # here, as the author wants it in this note
     return Table(
         "koszt-ekstraktorow",
         "Koszt obliczeniowy ekstraktorów cech",
@@ -620,7 +621,6 @@ def computational_cost_table(speed: dict) -> Table:
         rows,
         notes="Każdy model obejmuje ekstraktor i~głowę projekcyjną o~wyjściu 512-elementowym. "
               "Pomiary wykonano na karcie \\emph{NVIDIA GeForce RTX~4090}. "
-              "Przepustowość mierzono dla partii 64 wycinków, a~opóźnienie dla jednego wycinka. "
               "Szybkość kroku uczenia wyznaczono dla partii 16 wycinków, z~wykorzystaniem straty trójkowej, "
               "doboru BH i~optymalizatora \\emph{Adam}.",
         arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
