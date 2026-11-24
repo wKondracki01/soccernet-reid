@@ -8,12 +8,13 @@ Inputs (all written by earlier steps, nothing is trained or evaluated here)
 
 Figures (``--only`` picks a subset; each is saved as .pdf and .png)
     ladder      validation mAP after each step from the starting point to the final model
-    curves      learning curves, seven separate figures: the augmentation sets on ResNet-18 with their
+    curves      learning curves, eight separate figures: the augmentation sets on ResNet-18 with their
                 training loss and share of zero-loss steps, both classification losses of stage 2
-                with their training loss, the final configuration against AUG-MED, Multi-Similarity
-                and Circle in their two settings, the two cross-entropy reference runs with their
-                training loss, the sampling variants of stage 1, and the eight feature extractors
-                of stage 4 with their training loss
+                with their training loss, AUG-MED against AUG-STRONG in stage 5 with their training
+                loss and share of zero-loss steps, Multi-Similarity and Circle in their two settings,
+                the two cross-entropy reference runs with their training loss, the sampling variants
+                of stage 1, the eight feature extractors of stage 4 with their training loss, and four
+                variants of stage 5 against the base configuration
     dimension   validation mAP against the embedding size
     cost        validation mAP against the inference time of the backbone
     augment     the four augmentation presets applied to the same training crops
@@ -170,7 +171,13 @@ def draw_ladder(runs: dict[str, dict], runs_dir: Path, out_dir: Path) -> None:
 
 # One file per learning-curve figure, so that each can sit in the section it belongs to.
 CURVE_FIGURES = ("krzywe_augmentacja", "krzywe_klasyfikacja", "krzywe_konfiguracja_koncowa",
-                 "krzywe_ustawienia_strat", "krzywe_odniesienie", "krzywe_dobor", "krzywe_ekstraktory")
+                 "krzywe_ustawienia_strat", "krzywe_odniesienie", "krzywe_dobor", "krzywe_ekstraktory",
+                 "krzywe_weryfikacja_wariantow")
+
+# The stage-5 variants drawn one per panel against the base configuration; ArcFace is left out, as its
+# mAP stays far below the scale of the others (the thesis says so in the text).
+STAGE5_VARIANT_PANELS = (("Pamięć XBM", "G5_XBM"), ("Próbkowanie PK", "G5_PK"),
+                         ("Strata Circle", "G5_CIRCLE"), ("Strata Multi-Similarity", "G5_MS"))
 
 
 def _curve_style(ax, xlabel: str = "epoka", ylabel: str | None = "mAP",
@@ -191,17 +198,18 @@ def _curve_style(ax, xlabel: str = "epoka", ylabel: str | None = "mAP",
         ax.set_title(title, fontsize=SIZE_TITLE, color=SLATE)
 
 
-def _curve_axes(step: float, epochs: range, share: float = 0.75):
-    """A figure of mAP against the epoch, printed at ``share`` of the text width; ``epochs`` are the
-    x ticks, ``step`` the spacing of the y ticks."""
-    import matplotlib.pyplot as plt
-
-    width = share * TEXT_WIDTH_IN
-    fig, ax = plt.subplots(figsize=(width, 0.62 * width))
-    _curve_style(ax)
-    _comma_axis(ax, step=step)
-    ax.set_xticks(list(epochs))
-    return fig, ax
+def _band(ax, epochs, values: list, colour: str, measured: bool = False) -> None:
+    """The mean of several trainings at every epoch over a band from the lowest to the highest of them;
+    ``values`` holds the values of all trainings at each epoch. With ``measured`` the mean is drawn as
+    evaluations (markers on a dashed line), otherwise as a continuous line."""
+    epochs = list(epochs)
+    ax.fill_between(epochs, [min(v) for v in values], [max(v) for v in values], color=colour, alpha=0.15,
+                    linewidth=0)
+    means = [statistics.mean(v) for v in values]
+    if measured:
+        ax.plot(epochs, means, **_measured(colour, len(epochs)))
+    else:
+        ax.plot(epochs, means, color=colour, linewidth=1.0, solid_capstyle="round")
 
 
 def _measured(colour: str, points: int, linewidth: float = 0.8) -> dict:
@@ -321,13 +329,6 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
-    def finish(fig, ax, name: str, left: float, right: float, legend) -> None:
-        ax.set_xlim(left, right)
-        fig.tight_layout()
-        legend(fig)
-        _save(fig, out_dir, name)
-        plt.close(fig)
-
     # augmentation on ResNet-18, three panels side by side: validation mAP every five epochs, and in
     # every epoch the mean training loss and the share of steps with zero loss (continuous lines).
     # With flips only, the loss keeps falling and more and more batches give no gradient while mAP
@@ -385,22 +386,40 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     _save(fig, out_dir, CURVE_FIGURES[1])
     plt.close(fig)
 
-    # final configuration against the same setup with AUG-MED on ResNet-34 from epoch 10: the mean of
-    # the three seeds of each, with a band from the lowest to the highest of them at every evaluation;
-    # the seeds select their models at different epochs, so no single point is marked
-    fig, ax = _curve_axes(0.02, range(10, 61, 10))
-    for names, colour in ((BASE_SEEDS, CURVE_1), (FINAL_SEEDS, CURVE_2)):
+    # stage 5 on ResNet-34, the base configuration (AUG-MED) against the same setup with AUG-STRONG, in
+    # three panels as the stage-3 figure: validation mAP from epoch 10, and in every epoch the mean
+    # training loss and the share of steps with zero loss. Each set is the mean of its three seeds over a
+    # band from the lowest to the highest of them; the seeds select their models at different epochs, so
+    # no single point is marked. AUG-MED and AUG-STRONG keep the colours of the stage-3 figure.
+    fig, (left, middle, right) = plt.subplots(1, 3, figsize=(TEXT_WIDTH_IN, 2.5))
+    stage5_sets = ((BASE_SEEDS, CURVE_2, "AUG-MED"), (FINAL_SEEDS, CURVE_3, "AUG-STRONG"))
+    _curve_style(left, ylabel=None, title="mAP")
+    _curve_style(middle, ylabel=None, title="Strata treningowa")
+    _curve_style(right, ylabel=None, title="Kroki z zerową stratą [%]")
+    left.set_xticks(list(range(10, 61, 10)))
+    left.set_xlim(8, 62)
+    for ax in (middle, right):
+        ax.set_xticks(list(range(0, 61, 10)))
+        ax.set_xlim(0, 62)
+    _comma_axis(left, step=0.02)
+    _comma_axis(middle, digits=1, step=0.1)
+    _comma_axis(right, digits=0, step=5)
+    for names, colour, _ in stage5_sets:
         seeds = [dict(zip(*curve(runs[name]), strict=True)) for name in names]
         epochs = sorted(e for e in seeds[0] if e >= 10 and all(e in s for s in seeds))
-        values = [[s[e] for s in seeds] for e in epochs]
-        ax.fill_between(epochs, [min(v) for v in values], [max(v) for v in values], color=colour, alpha=0.15,
-                        linewidth=0)
-        ax.plot(epochs, [statistics.mean(v) for v in values], **_measured(colour, len(epochs)))
-    ax.set_ylim(0.72, 0.82)
+        _band(left, epochs, [[s[e] for s in seeds] for e in epochs], colour, measured=True)
+        for ax, key, scale in ((middle, "train_loss_epoch", 1.0), (right, "zero_loss_by_epoch", 100.0)):
+            per_epoch = list(zip(*[[scale * float(v) for v in runs[n][key]] for n in names], strict=True))
+            _band(ax, range(1, len(per_epoch) + 1), per_epoch, colour)
+    left.set_ylim(0.72, 0.82)
+    middle.set_ylim(0, 0.4)
+    right.set_ylim(0, 20)
+    fig.tight_layout(w_pad=1.0)
     band = Patch(facecolor=SLATE, alpha=0.15, linewidth=0)
-    finish(fig, ax, CURVE_FIGURES[2], 8, 62,
-           lambda f: _legend_below(f, [(CURVE_1, "AUG-MED, średnia"), (CURVE_2, "AUG-STRONG, średnia")],
-                                   extra=[(band, "zakres trzech treningów")]))
+    _legend_below(fig, [(colour, f"{label}, średnia") for _, colour, label in stage5_sets], solid=1.0,
+                  extra=[(band, "zakres trzech treningów")])
+    _save(fig, out_dir, CURVE_FIGURES[2])
+    plt.close(fig)
 
     # Multi-Similarity and Circle on ResNet-18, each in both settings of stage 2, side by side on one
     # mAP scale, over the triplet loss kept from stage 1 as a grey reference; each panel names its
@@ -503,6 +522,27 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
                bbox_to_anchor=(0.5, 0.0), ncol=2, columnspacing=1.5, handler_map={tuple: _stacked_handler()},
                **{**LEGEND, "handleheight": 1.9})
     _save(fig, out_dir, CURVE_FIGURES[6])
+    plt.close(fig)
+
+    # stage 5, the variants of STAGE5_VARIANT_PANELS one per panel, on one mAP scale from epoch 10 as
+    # figure 5.8; in every panel the base configuration trained with seed 0, against which the table
+    # gives the differences of the variants (all trained with seed 0), is the grey reference
+    fig, axes = plt.subplots(2, 2, figsize=(TEXT_WIDTH_IN, 4.3), sharex=True, sharey=True)
+    for ax, (title, name) in zip(axes.flat, STAGE5_VARIANT_PANELS, strict=True):
+        spec = ax.get_subplotspec()
+        _curve_style(ax, xlabel="epoka" if spec.is_last_row() else "",
+                     ylabel="mAP" if spec.is_first_col() else None, title=title)
+        _comma_axis(ax, step=0.04)
+        ax.set_xticks(list(range(10, 61, 10)))
+        ax.set_xlim(8, 62)
+        _curve_line(ax, runs[BASE_SEEDS[0]], REFERENCE, from_epoch=10, mark_best=False, zorder=1)
+        _curve_line(ax, runs[name], CURVE_1, from_epoch=10, zorder=2)
+    axes[0][0].set_ylim(0.64, 0.82)
+    fig.tight_layout(h_pad=1.0, w_pad=1.5)
+    variant = Line2D([0], [0], **_measured(CURVE_1, 1))
+    reference = Line2D([0], [0], **_measured(REFERENCE, 1))
+    _legend_below(fig, [], best=True, extra=[(variant, "wariant"), (reference, "konfiguracja bazowa (ziarno 0)")])
+    _save(fig, out_dir, CURVE_FIGURES[7])
     plt.close(fig)
 
 

@@ -15,6 +15,12 @@ def _load_script():
     return module
 
 
+def test_stage_5_adds_the_three_trainings_of_both_augmentation_sets() -> None:
+    script = _load_script()
+    assert script.STAGE5_RUNS == ("G5_REF", "G5_REF_S1", "G5_REF_S2", "G5_STRONG", "G5_STRONG_S1", "G5_STRONG_S2")
+    assert not set(script.STAGE3_RUNS) & set(script.STAGE5_RUNS)
+
+
 def test_zero_loss_steps_are_counted_per_epoch() -> None:
     script = _load_script()
     losses = [0.0, 0.3, 0.0, 0.0, 0.2, 0.1, 0.0, 0.4]

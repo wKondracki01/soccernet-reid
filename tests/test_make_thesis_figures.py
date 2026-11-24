@@ -81,7 +81,7 @@ def test_ladder_adds_reranking_only_when_all_three_seeds_have_it(runs, tmp_path)
     assert len(steps) == 6 and steps[-1][1] == pytest.approx(0.832)
 
 
-def test_learning_curves_are_saved_as_seven_separate_figures(tmp_path) -> None:
+def test_learning_curves_are_saved_as_eight_separate_figures(tmp_path) -> None:
     pytest.importorskip("matplotlib")
     import matplotlib
 
@@ -89,13 +89,15 @@ def test_learning_curves_are_saved_as_seven_separate_figures(tmp_path) -> None:
     script = _load_script()
     names = ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", *script.BASE_SEEDS, *script.FINAL_SEEDS,
              "G2_MS", "G2_MS_B05", "G2_CIRCLE", "G2_CIRCLE_M04",
-             "G1_PK_BH", "G1_PK_SH", "G1_PK_BH_XBM", "G1_PK_SA_SH", "G1_PK_SA_BH_XBM")
+             "G1_PK_BH", "G1_PK_SH", "G1_PK_BH_XBM", "G1_PK_SA_SH", "G1_PK_SA_BH_XBM",
+             *(name for _, name in script.STAGE5_VARIANT_PANELS))
     runs = {name: _run(0.8, [0.70, 0.75, 0.78, 0.80]) for name in names}
     # the reference figure and the classification figure also plot the training loss
     for name in ("G0b_variant_K", "G0c_variant_K_WD", "G2_CE", "G2_CE_WD", "G2_ARC", "G2_ARC_WD"):
         runs[name] = dict(_run(0.5, [0.47, 0.46, 0.45]), train_loss_epoch=[11.8, 9.4, 6.3, 4.7])
-    # the augmentation figure also plots the training loss and the share of zero-loss steps
-    for name in ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG"):
+    # the augmentation figures of stages 3 and 5 also plot the training loss and the share of zero-loss
+    # steps, in stage 5 as the mean of three seeds
+    for name in ("G1_PK_SA_BH", "G3_AUG_MED", "G3_AUG_STRONG", *script.BASE_SEEDS, *script.FINAL_SEEDS):
         runs[name].update(train_loss_epoch=[0.36, 0.30, 0.22, 0.10], zero_loss_by_epoch=[0.0, 0.01, 0.2, 0.5])
     # the extractor figure plots every backbone of stage 4 with its training loss
     for run, _ in script.BACKBONE_RUNS.values():
@@ -103,7 +105,31 @@ def test_learning_curves_are_saved_as_seven_separate_figures(tmp_path) -> None:
     script.draw_curves(runs, tmp_path)
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
         f"{name}.{ext}" for name in script.CURVE_FIGURES for ext in ("pdf", "png"))
-    assert len(script.CURVE_FIGURES) == 7
+    assert len(script.CURVE_FIGURES) == 8
+
+
+def test_stage5_variant_figure_has_one_panel_per_variant_without_arcface() -> None:
+    script = _load_script()
+    runs = [name for _, name in script.STAGE5_VARIANT_PANELS]
+    assert runs == ["G5_XBM", "G5_PK", "G5_CIRCLE", "G5_MS"]          # ArcFace is described in the text
+    assert script.BASE_SEEDS[0] == "G5_REF"                           # the reference trained with seed 0
+
+
+def test_band_draws_the_mean_over_the_range_of_the_trainings() -> None:
+    pytest.importorskip("matplotlib")
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    script = _load_script()
+    fig, ax = plt.subplots()
+    script._band(ax, [1, 2], [[0.1, 0.3, 0.2], [0.4, 0.6, 0.5]], "#000000")
+    (line,) = ax.get_lines()
+    assert list(line.get_ydata()) == pytest.approx([0.2, 0.5])
+    band = ax.collections[0].get_paths()[0].vertices
+    assert band[:, 1].min() == pytest.approx(0.1) and band[:, 1].max() == pytest.approx(0.6)
+    plt.close(fig)
 
 
 def test_extractor_columns_cover_stage_4_with_at_most_three_series_per_panel() -> None:
