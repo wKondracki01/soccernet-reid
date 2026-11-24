@@ -736,19 +736,22 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     # stage 5: the base and selected variants, all trained with seed 0
     variants = [
         ("zestaw AUG-STRONG", "G5_STRONG"), ("pamięć XBM", "G5_XBM"), ("strata Circle", "G5_CIRCLE"),
-        ("strata Multi-Similarity", "G5_MS"), ("próbkowanie PK", "G5_PK"), ("strata ArcFace z~regularyzacją wag", "G5_ARC_WD"),
+        ("strata Multi-Similarity", "G5_MS"), ("próbkowanie PK", "G5_PK"), ("strata ArcFace", "G5_ARC_WD"),
     ]
     cells = metric_cells([scores(runs_dir, BASE_SEEDS[0])] + [scores(runs_dir, run) for _, run in variants])
-    rows = [["konfiguracja bazowa", *cells[0], DASH], None]
+    rows = [["konfiguracja bazowa", *cells[0], ""], None]
     for (label, run), row_cells in zip(variants, cells[1:], strict=True):
         delta, low, high = difference(bootstrap, run, BASE_SEEDS[0])
         rows.append([label, *row_cells, f"{points(delta)} {interval(low, high)}"])
     tables.append(Table(
         "wyniki-weryfikacja",
-        "Wyniki ponownego porównania wybranych wariantów na zbiorze walidacyjnym "
-        "(ResNet-34, 60 epok, to samo ziarno, różnica mAP względem konfiguracji bazowej z~95-procentowym "
-        "przedziałem ufności)",
-        par(0.26) + "rrrr" + par(0.24), [["Wariant", *METRIC_HEADER, "Różnica mAP [pp]"]], rows))
+        "Wyniki ponownego porównania wybranych wariantów na zbiorze walidacyjnym (\\emph{ResNet-34}, 60 epok)",
+        "lrrrrr", [["Wariant", *METRIC_HEADER, "Różnica mAP [pp]"]], rows,
+        notes="Wszystkie treningi wykonano z~ziarnem~0. W~ostatniej kolumnie podano różnicę mAP względem "
+              "konfiguracji bazowej wraz z~95-procentowym przedziałem ufności. Wariant ze stratą ArcFace uczono "
+              "z~próbkowaniem RAND i~współczynnikiem regularyzacji wag równym $5\\cdot10^{-4}$.",
+        arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
+    ))
 
     def seeds_table(name: str, caption: str, seeds: tuple[str, ...]) -> Table:
         values = [scores(runs_dir, run) for run in seeds]
@@ -757,11 +760,12 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         columns = list(zip(*values, strict=True))
         rows += [None, ["średnia", *[pl(statistics.mean(c)) for c in columns]],
                  ["odchylenie standardowe", *[pl(statistics.stdev(c)) for c in columns]]]
-        return Table(name, caption, "lrrrr", [["Trening", *METRIC_HEADER]], rows)
+        return Table(name, caption, "lrrrr", [["Trening", *METRIC_HEADER]], rows, arraystretch=1.18)
 
     tables.append(seeds_table(
         "wyniki-rozrzut",
-        "Rozrzut wyników między trzema treningami konfiguracji bazowej, zbiór walidacyjny", BASE_SEEDS))
+        "Wyniki trzech treningów konfiguracji bazowej na zbiorze walidacyjnym "
+        "(\\emph{ResNet-34}, strata trójkowa, PK-SA-BH, AUG-MED, 60 epok)", BASE_SEEDS))
 
     # final configuration on validation and test
     test = [tuple(float(json.loads((runs_dir / run / "eval_test.json").read_text())[m]) for m in METRICS)
