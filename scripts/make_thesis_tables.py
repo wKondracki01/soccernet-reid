@@ -747,7 +747,8 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         "wyniki-weryfikacja",
         "Wyniki ponownego porównania wybranych wariantów na zbiorze walidacyjnym (\\emph{ResNet-34}, 60 epok)",
         "lrrrrr", [["Wariant", *METRIC_HEADER, "Różnica mAP [pp]"]], rows,
-        notes="Wszystkie treningi wykonano z~ziarnem~0. W~ostatniej kolumnie podano różnicę mAP względem "
+        notes="Konfiguracja bazowa obejmowała stratę trójkową, PK-SA-BH i~AUG-MED. "
+              "Wszystkie treningi wykonano z~ziarnem~0. W~ostatniej kolumnie podano różnicę mAP względem "
               "konfiguracji bazowej wraz z~95-procentowym przedziałem ufności. Wariant ze stratą ArcFace uczono "
               "z~próbkowaniem RAND i~współczynnikiem regularyzacji wag równym $5\\cdot10^{-4}$.",
         arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
