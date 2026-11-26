@@ -763,8 +763,8 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         rows += [None, ["Średnia", *[pl(statistics.mean(c)) for c in columns]],
                  ["Odchylenie standardowe", *[pl(statistics.stdev(c)) for c in columns]]]
         # stretched to the width of the other result tables of chapter 5, laid out as the table of the
-        # feature extractors, with a first column just wide enough for "Odchylenie standardowe"
-        return Table(name, caption, par(0.28) + "rrrr", [["Trening", *METRIC_HEADER]], rows, arraystretch=1.18,
+        # feature extractors; the first column takes 0.37 of the line, as the author set it in the thesis
+        return Table(name, caption, par(0.37) + "rrrr", [["Trening", *METRIC_HEADER]], rows, arraystretch=1.18,
                      width="0.97\\linewidth")
 
     tables.append(seeds_table(
