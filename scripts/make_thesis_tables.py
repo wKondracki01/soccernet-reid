@@ -750,8 +750,10 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         "lrrrrr", [["Wariant", *METRIC_HEADER, "Różnica mAP [pp]"]], rows,
         notes="Konfiguracja bazowa obejmowała stratę trójkową, PK-SA-BH i~AUG-MED. "
               "Wszystkie treningi wykonano z~ziarnem~0. W~ostatniej kolumnie podano różnicę mAP względem "
-              "konfiguracji bazowej wraz z~95-procentowym przedziałem ufności. Wariant ze stratą \\emph{ArcFace} uczono "
-              "z~próbkowaniem RAND i~współczynnikiem regularyzacji wag równym $5\\cdot10^{-4}$.",
+              "konfiguracji bazowej wraz z~95-procentowym przedziałem ufności. Warianty ze stratami "
+              "\\emph{Multi-Similarity} i~\\emph{Circle} uczono odpowiednio z~$\\lambda=0{,}5$ "
+              "i~$(m,\\gamma)=(0{,}4;\\,80)$, a~wariant ze stratą \\emph{ArcFace} z~próbkowaniem RAND "
+              "i~współczynnikiem regularyzacji wag równym $5\\cdot10^{-4}$.",
         arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
     ))
 
