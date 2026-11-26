@@ -678,7 +678,7 @@ def loss_results_tables(runs_dir: Path, bootstrap: dict[str, dict]) -> list[Tabl
         "wyniki-ustawienia-strat",
         "Wpływ ustawień funkcji straty na mAP i~rozmieszczenie wektorów cech na zbiorze walidacyjnym "
         "(\\emph{ResNet-18}, AUG-MIN, 40 epok)",
-        "llrrrr", [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "$D_{\\mathrm{ef}}$", "Różnica mAP [pp]"]],
+        "llrrrr", [["Funkcja straty", "Ustawienie", "mAP", "Kosinus", "$D_{\\mathrm{ef}}$", "Różnica mAP [p.p.]"]],
         rows[:-1], arraystretch=1.18, tabcolsep=3, width="0.97\\linewidth",
         # both statistics are defined in the thesis section on image representation, so the note only
         # says which vectors they were computed from
@@ -747,7 +747,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     tables.append(Table(
         "wyniki-weryfikacja",
         "Wyniki ponownego porównania wybranych wariantów na zbiorze walidacyjnym (\\emph{ResNet-34}, 60 epok)",
-        "lrrrrr", [["Wariant", *METRIC_HEADER, "Różnica mAP [pp]"]], rows,
+        "lrrrrr", [["Wariant", *METRIC_HEADER, "Różnica mAP [p.p.]"]], rows,
         notes="Konfiguracja bazowa obejmowała stratę trójkową, PK-SA-BH i~AUG-MED. "
               "Wszystkie treningi wykonano z~ziarnem~0. W~ostatniej kolumnie podano różnicę mAP względem "
               "konfiguracji bazowej wraz z~95-procentowym przedziałem ufności. Warianty ze stratami "
@@ -820,7 +820,7 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         "wyniki-reranking",
         "Wyniki re-rankingu dla konfiguracji końcowej, średnia i~odchylenie standardowe z~trzech treningów "
         "(parametry dobrane na zbiorze walidacyjnym i~zastosowane bez zmian na zbiorze testowym)",
-        "llrrrrr", [["Zbiór", "Wariant", "mAP", "Rank-1", "Rank-5", "Rank-10", "Zysk mAP [pp]"]], rows,
+        "llrrrrr", [["Zbiór", "Wariant", "mAP", "Rank-1", "Rank-5", "Rank-10", "Zysk mAP [p.p.]"]], rows,
         size="\\footnotesize"))
 
     # embedding size

@@ -157,7 +157,8 @@ def draw_ladder(runs: dict[str, dict], runs_dir: Path, out_dir: Path) -> None:
             ax.annotate(pl(y), (x, y), textcoords="offset points", xytext=(0, -8), ha="center",
                         va="top", fontsize=SIZE_NOTE, color=SLATE)
             continue
-        text = f"{pl(y)}\n(+{pl(100 * (y - ys[i - 1]), 1)} pp)"
+        # p.p. (punkt procentowy) is written with dots, as in the headers of the tables
+        text = f"{pl(y)}\n(+{pl(100 * (y - ys[i - 1]), 1)} p.p.)"
         ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 7), ha="center",
                     va="bottom", fontsize=SIZE_NOTE, color=SLATE, linespacing=1.15)
     ax.set_xticks(xs)
