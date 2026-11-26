@@ -733,13 +733,14 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
     tables.append(backbone_results_table(runs_dir))
     tables.append(computational_cost_table(speed))
 
-    # stage 5: the base and selected variants, all trained with seed 0
+    # stage 5: the base and selected variants, all trained with seed 0; the entries of the first column
+    # start with a capital letter, as in the tables of chapters 3 and 4
     variants = [
-        ("zestaw AUG-STRONG", "G5_STRONG"), ("pamięć XBM", "G5_XBM"), ("strata Circle", "G5_CIRCLE"),
-        ("strata Multi-Similarity", "G5_MS"), ("próbkowanie PK", "G5_PK"), ("strata ArcFace", "G5_ARC_WD"),
+        ("Zestaw AUG-STRONG", "G5_STRONG"), ("Pamięć XBM", "G5_XBM"), ("Strata Circle", "G5_CIRCLE"),
+        ("Strata Multi-Similarity", "G5_MS"), ("Próbkowanie PK", "G5_PK"), ("Strata ArcFace", "G5_ARC_WD"),
     ]
     cells = metric_cells([scores(runs_dir, BASE_SEEDS[0])] + [scores(runs_dir, run) for _, run in variants])
-    rows = [["konfiguracja bazowa", *cells[0], ""], None]
+    rows = [["Konfiguracja bazowa", *cells[0], ""], None]
     for (label, run), row_cells in zip(variants, cells[1:], strict=True):
         delta, low, high = difference(bootstrap, run, BASE_SEEDS[0])
         rows.append([label, *row_cells, f"{points(delta)} {interval(low, high)}"])
@@ -756,11 +757,11 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
 
     def seeds_table(name: str, caption: str, seeds: tuple[str, ...]) -> Table:
         values = [scores(runs_dir, run) for run in seeds]
-        rows = [[f"ziarno {run_config(runs_dir, run)['seed']}", *[pl(v) for v in row]]
+        rows = [[f"Ziarno {run_config(runs_dir, run)['seed']}", *[pl(v) for v in row]]
                 for run, row in zip(seeds, values, strict=True)]
         columns = list(zip(*values, strict=True))
-        rows += [None, ["średnia", *[pl(statistics.mean(c)) for c in columns]],
-                 ["odchylenie standardowe", *[pl(statistics.stdev(c)) for c in columns]]]
+        rows += [None, ["Średnia", *[pl(statistics.mean(c)) for c in columns]],
+                 ["Odchylenie standardowe", *[pl(statistics.stdev(c)) for c in columns]]]
         return Table(name, caption, "lrrrr", [["Trening", *METRIC_HEADER]], rows, arraystretch=1.18)
 
     tables.append(seeds_table(
