@@ -762,7 +762,10 @@ def result_tables(runs: dict[str, dict], runs_dir: Path, bootstrap: dict[str, di
         columns = list(zip(*values, strict=True))
         rows += [None, ["Średnia", *[pl(statistics.mean(c)) for c in columns]],
                  ["Odchylenie standardowe", *[pl(statistics.stdev(c)) for c in columns]]]
-        return Table(name, caption, "lrrrr", [["Trening", *METRIC_HEADER]], rows, arraystretch=1.18)
+        # stretched to the width of the other result tables of chapter 5, laid out as the table of the
+        # feature extractors, with a first column just wide enough for "Odchylenie standardowe"
+        return Table(name, caption, par(0.28) + "rrrr", [["Trening", *METRIC_HEADER]], rows, arraystretch=1.18,
+                     width="0.97\\linewidth")
 
     tables.append(seeds_table(
         "wyniki-rozrzut",
