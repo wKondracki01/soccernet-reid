@@ -132,6 +132,22 @@ def test_band_draws_the_mean_over_the_range_of_the_trainings() -> None:
     plt.close(fig)
 
 
+def test_band_entry_stands_in_the_row_of_the_series() -> None:
+    pytest.importorskip("matplotlib")
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    script = _load_script()
+    fig, _ = plt.subplots()
+    band = script._BandSwatch(("#000000", "#ff0000"))
+    script._legend_below(fig, [("#000000", "A"), ("#ff0000", "B")], solid=1.0, inline=[(band, "zakres")])
+    (legend,) = fig.legends                                  # one row, no second legend under it
+    assert [text.get_text() for text in legend.get_texts()] == ["A", "B", "zakres"]
+    plt.close(fig)
+
+
 def test_extractor_columns_cover_stage_4_with_at_most_three_series_per_panel() -> None:
     script = _load_script()
     codes = [code for _, column in script.EXTRACTOR_COLUMNS for code in column]

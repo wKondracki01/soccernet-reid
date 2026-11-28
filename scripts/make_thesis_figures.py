@@ -199,13 +199,17 @@ def _curve_style(ax, xlabel: str = "epoka", ylabel: str | None = "mAP",
         ax.set_title(title, fontsize=SIZE_TITLE, color=SLATE)
 
 
+BAND_ALPHA = 0.20      # the band of the trainings around their mean, in the plot and in the legend; the
+                       # author chose 0.20, since at 0.15 it was hardly visible in print
+
+
 def _band(ax, epochs, values: list, colour: str, measured: bool = False) -> None:
     """The mean of several trainings at every epoch over a band from the lowest to the highest of them;
     ``values`` holds the values of all trainings at each epoch. With ``measured`` the mean is drawn as
     evaluations (markers on a dashed line), otherwise as a continuous line."""
     epochs = list(epochs)
-    ax.fill_between(epochs, [min(v) for v in values], [max(v) for v in values], color=colour, alpha=0.15,
-                    linewidth=0)
+    ax.fill_between(epochs, [min(v) for v in values], [max(v) for v in values], color=colour,
+                    alpha=BAND_ALPHA, linewidth=0)
     means = [statistics.mean(v) for v in values]
     if measured:
         ax.plot(epochs, means, **_measured(colour, len(epochs)))
@@ -295,12 +299,37 @@ def _stacked_entry(colour: str, solid: float = 1.0) -> tuple:
     return Line2D([0], [0], **_measured(colour, 1)), Line2D([0], [0], color=colour, linewidth=solid)
 
 
+class _BandSwatch:
+    """Legend handle of the bands drawn around the means: one light patch per colour, side by side, each
+    in the colour and transparency its band has in the plot."""
+
+    def __init__(self, colours: tuple[str, ...]):
+        self.colours = colours
+
+
+def _band_handler():
+    """Legend handler of ``_BandSwatch``: the patches in a strip across the middle of the handle."""
+    from matplotlib.legend_handler import HandlerBase
+    from matplotlib.patches import Rectangle
+
+    class Bands(HandlerBase):
+        def create_artists(self, legend, orig_handle, xdescent, ydescent, width, height, fontsize, trans):
+            part, strip = width / len(orig_handle.colours), 0.5 * height
+            y = -ydescent + (height - strip) / 2
+            return [Rectangle((-xdescent + i * part, y), part, strip, facecolor=colour, alpha=BAND_ALPHA,
+                              linewidth=0, transform=trans)
+                    for i, colour in enumerate(orig_handle.colours)]
+
+    return Bands()
+
+
 def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra: list | None = None,
-                  ncol: int | None = None, solid: float | None = None) -> None:
-    """Legend centred under the axes: the series in one row (or ``ncol`` columns), and in a second row
-    the open circle of the selected model and any ``extra`` (handle, label) pairs. With ``solid`` (a
-    line width) each series shows, under its usual sample, the continuous line it has in another
-    panel. Drawn after tight_layout, so that it never covers a line."""
+                  ncol: int | None = None, solid: float | None = None, inline: list | None = None) -> None:
+    """Legend centred under the axes: the series in one row (or ``ncol`` columns), followed in the same
+    row by any ``inline`` (handle, label) pairs, and in a second row the open circle of the selected
+    model and any ``extra`` (handle, label) pairs. With ``solid`` (a line width) each series shows,
+    under its usual sample, the continuous line it has in another panel. Drawn after tight_layout, so
+    that it never covers a line."""
     from matplotlib.lines import Line2D
 
     rows = []
@@ -309,15 +338,19 @@ def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra
         if solid:
             handles = [(h, Line2D([0], [0], color=colour, linewidth=solid))
                        for h, (colour, _) in zip(handles, entries, strict=True)]
+        for handle, label in inline or []:
+            handles.append(handle)
+            labels.append(label)
         rows.append((handles, labels))
     if best or extra:
         rows.append(_legend_items([], best, extra))
     top = 0.0
     for i, (handles, labels) in enumerate(rows):
         stacked = i == 0 and bool(solid)
+        handler_map = {_BandSwatch: _band_handler(), **({tuple: _stacked_handler()} if stacked else {})}
         legend = fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, top),
                             ncol=(ncol if i == 0 and ncol else len(labels)), columnspacing=1.5,
-                            handler_map={tuple: _stacked_handler()} if stacked else None,
+                            handler_map=handler_map,
                             **{**LEGEND, "handleheight": 1.9} if stacked else LEGEND)
         if stacked:   # a taller row: the next one starts right under it
             box = legend.get_window_extent(fig.canvas.get_renderer())
@@ -328,7 +361,6 @@ def _legend_below(fig, entries: list[tuple[str, str]], best: bool = False, extra
 
 def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     import matplotlib.pyplot as plt
-    from matplotlib.patches import Patch
 
     # augmentation on ResNet-18, three panels side by side: validation mAP every five epochs, and in
     # every epoch the mean training loss and the share of steps with zero loss (continuous lines).
@@ -416,9 +448,10 @@ def draw_curves(runs: dict[str, dict], out_dir: Path) -> None:
     middle.set_ylim(0, 0.4)
     right.set_ylim(0, 20)
     fig.tight_layout(w_pad=1.0)
-    band = Patch(facecolor=SLATE, alpha=0.15, linewidth=0)
+    # the band entry stands in the row of the series, in the colours of both bands, as the author asked
+    band = _BandSwatch(tuple(colour for _, colour, _ in stage5_sets))
     _legend_below(fig, [(colour, f"{label}, średnia") for _, colour, label in stage5_sets], solid=1.0,
-                  extra=[(band, "zakres trzech treningów")])
+                  inline=[(band, "zakres trzech treningów")])
     _save(fig, out_dir, CURVE_FIGURES[2])
     plt.close(fig)
 
